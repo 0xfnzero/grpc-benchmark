@@ -17,7 +17,6 @@
 ### 前置要求
 
 - Rust 1.70+ (通过 [rustup](https://rustup.rs/) 安装)
-- Protocol Buffers 编译器 (`protoc`)
 
 ### 从源码构建
 

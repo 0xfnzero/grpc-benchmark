@@ -17,7 +17,6 @@ A high-performance gRPC benchmark tool implemented in Rust for testing Solana Ye
 ### Prerequisites
 
 - Rust 1.70+ (install via [rustup](https://rustup.rs/))
-- Protocol Buffers compiler (`protoc`)
 
 ### Build from Source
 
