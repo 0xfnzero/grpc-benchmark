@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(OPENSSL_DIR=/usr/local/opt/openssl@3 PKG_CONFIG_PATH=/usr/local/opt/openssl@3/lib/pkgconfig cargo build --release)",
+      "Bash(rm:*)",
+      "Bash(cargo clean:*)",
+      "Bash(OPENSSL_DIR=/usr/local/opt/openssl@3 PKG_CONFIG_PATH=/usr/local/opt/openssl@3/lib/pkgconfig cargo check)",
+      "Bash(sudo cargo run --bin grpc_comparison)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

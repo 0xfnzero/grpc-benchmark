@@ -14,6 +14,7 @@ use yellowstone_grpc_proto::prelude::{
     subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest, SubscribeRequestFilterSlots,
 };
 use tonic::transport::{ClientTlsConfig, Certificate};
+use grpc_benchmark::output::{ColoredOutput, EndpointStatus};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -81,10 +82,82 @@ impl EndpointStats {
 
 fn log_info(msg: &str) {
     let now: DateTime<Local> = Local::now();
-    println!("[{}] INFO: {}", now.format("%H:%M:%S%.3f"), msg);
+    use colored::*;
+    
+    // 解析消息格式: "GRPC_NAME 接收 slot XXX: 延迟/首次接收"
+    if let Some(captures) = extract_log_parts(msg) {
+        println!("{} {} {} {} {}", 
+                format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
+                format!("{:width$}", captures.grpc_name, width = get_max_name_length()).bright_white(),
+                captures.action.green(),
+                captures.slot_info.yellow(),
+                format!(": {}", captures.timing).magenta()
+        );
+    } else {
+        // 如果不匹配模式，使用默认格式
+        println!("{} {}", 
+                format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
+                msg.green()
+        );
+    }
+}
+
+// 全局变量来存储最大名称长度
+static mut MAX_NAME_LENGTH: usize = 0;
+static mut MAX_NAME_LENGTH_INIT: std::sync::Once = std::sync::Once::new();
+
+fn set_max_name_length(length: usize) {
+    unsafe {
+        MAX_NAME_LENGTH_INIT.call_once(|| {
+            MAX_NAME_LENGTH = length;
+        });
+    }
+}
+
+fn get_max_name_length() -> usize {
+    unsafe { MAX_NAME_LENGTH }
+}
+
+struct LogParts {
+    grpc_name: String,
+    action: String,
+    slot_info: String,
+    timing: String,
+}
+
+fn extract_log_parts(msg: &str) -> Option<LogParts> {
+    // 匹配格式: "GRPC_NAME 接收 slot XXX: 延迟/首次接收信息"
+    if let Some(pos) = msg.find("接收") {
+        let grpc_name = msg[..pos].trim().to_string();
+        let rest = &msg[pos..];
+        
+        if let Some(colon_pos) = rest.find(':') {
+            let slot_part = rest[..colon_pos].trim().to_string();
+            let timing_part = rest[colon_pos + 1..].trim().to_string();
+            
+            // 正确处理中文字符：去掉"接收"（2个中文字符）
+            let slot_info = if slot_part.starts_with("接收") {
+                slot_part.chars().skip(2).collect::<String>().trim().to_string()
+            } else {
+                slot_part
+            };
+            
+            return Some(LogParts {
+                grpc_name,
+                action: "接收".to_string(),
+                slot_info,
+                timing: timing_part,
+            });
+        }
+    }
+    None
 }
 
 async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec: u64) -> Result<()> {
+    // 计算最大端点名称长度用于对齐输出
+    let max_name_length = endpoints.iter().map(|e| e.name.len()).max().unwrap_or(0);
+    set_max_name_length(max_name_length);
+    
     log_info("开始对比多个 GRPC 服务性能...");
     log_info(&format!("测试持续时间: {}秒", test_duration_sec));
     log_info(&format!(
@@ -123,9 +196,6 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
     let first_received_slots = Arc::new(Mutex::new(HashMap::<String, u64>::new()));
     let started_formal_stats = Arc::new(Mutex::new(false));
     let pending_block_data = Arc::new(Mutex::new(HashMap::<u64, Vec<BlockData>>::new()));
-
-    // 计算最大端点名称长度用于对齐输出
-    let max_name_length = endpoints.iter().map(|e| e.name.len()).max().unwrap_or(0);
 
     // 检查所有slot对齐的函数
     async fn check_slots_alignment(
@@ -184,7 +254,6 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
         block_data_by_slot: Arc<Mutex<HashMap<u64, Vec<BlockData>>>>,
         active_endpoints: Arc<Mutex<HashSet<String>>>,
         endpoint_stats: Arc<Mutex<HashMap<String, EndpointStats>>>,
-        max_name_length: usize,
     ) {
         let mut pending = pending_block_data.lock().await;
         let block_data_by_slot_ref = block_data_by_slot.clone();
@@ -234,7 +303,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                         "{:width$} 接收 slot {}: 首次接收",
                         first_endpoint.endpoint,
                         first_endpoint.slot,
-                        width = max_name_length
+                        width = get_max_name_length()
                     ));
                 }
 
@@ -252,7 +321,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                     bd.slot,
                                     latency,
                                     first_endpoint.endpoint,
-                                    width = max_name_length
+                                    width = get_max_name_length()
                                 ));
                             }
                         }
@@ -407,7 +476,6 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                                 block_data_by_slot.clone(),
                                                 active_endpoints.clone(),
                                                 endpoint_stats.clone(),
-                                                max_name_length,
                                             ).await;
                                         }
                                     }
@@ -515,7 +583,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                         "{:width$} 接收 slot {}: 首次接收",
                                         first_endpoint.endpoint,
                                         current_slot,
-                                        width = max_name_length
+                                        width = get_max_name_length()
                                     ));
                                 }
 
@@ -533,7 +601,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                                     current_slot,
                                                     latency,
                                                     first_endpoint.endpoint,
-                                                    width = max_name_length
+                                                    width = get_max_name_length()
                                                 ));
                                             }
                                         }
@@ -615,8 +683,9 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
         task.abort();
     }
 
-    log_info("测试完成，分析结果...");
-    log_info(""); // 空行
+    let output = ColoredOutput::new();
+    output.success("测试完成，正在分析结果...");
+    output.separator();
 
     // 分析和输出结果
     let stats = endpoint_stats.lock().await;
@@ -633,42 +702,37 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 let min_latency = stat.latencies.iter().fold(f64::INFINITY, |a, &b| a.min(b));
                 let max_latency = stat.latencies.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
 
-                log_info(&format!("===== {} 性能分析 =====", endpoint.name));
-                log_info(&format!("总接收区块数: {}", stat.total_received));
-                log_info(&format!(
-                    "首先接收区块数: {} ({:.2}%)",
-                    stat.first_received,
-                    (stat.first_received as f64 / stat.total_received as f64) * 100.0
-                ));
+                output.subheader(&format!("📊 {} 性能分析", endpoint.name));
+                output.metric("总接收区块数", &stat.total_received.to_string(), "blocks");
+                
+                let first_percent = (stat.first_received as f64 / stat.total_received as f64) * 100.0;
+                output.metric("首先接收区块数", &format!("{} ({:.2}%)", stat.first_received, first_percent), "blocks");
 
                 let delayed_count = stat.latencies.len();
-                log_info(&format!("落后接收区块数: {} ({:.2}%)",
-                    delayed_count,
-                    (delayed_count as f64 / stat.total_received as f64) * 100.0
-                ));
+                let delayed_percent = (delayed_count as f64 / stat.total_received as f64) * 100.0;
+                output.metric("落后接收区块数", &format!("{} ({:.2}%)", delayed_count, delayed_percent), "blocks");
 
                 if !stat.latencies.is_empty() {
-                    log_info("延迟统计 (相对于最快端点):");
-                    log_info(&format!("  平均延迟: {:>6.2}ms", avg_latency));
-                    log_info(&format!("  最小延迟: {:>6.2}ms", min_latency));
-                    log_info(&format!("  最大延迟: {:>6.2}ms", max_latency));
+                    output.info("延迟统计 (相对于最快端点):");
+                    output.metric("  平均延迟", &format!("{:.2}", avg_latency), "ms");
+                    output.metric("  最小延迟", &format!("{:.2}", min_latency), "ms");
+                    output.metric("  最大延迟", &format!("{:.2}", max_latency), "ms");
                 } else {
-                    log_info("该端点始终是最快的，没有延迟数据");
+                    output.success("该端点始终是最快的，没有延迟数据");
                 }
-
-                // 验证统计数据
-                log_info(&format!("统计验证: 首先接收({}) + 落后接收({}) = 总计({})",
-                    stat.first_received, delayed_count, stat.total_received));
-                log_info(""); // 每个端点分析后空一行
+                
+                output.separator();
             } else {
-                log_info(&format!("{}: 没有收集到数据", endpoint.name));
-                log_info(""); // 空一行
+                output.warning(&format!("{}: 没有收集到数据", endpoint.name));
             }
         }
     }
 
     // 性能对比
-    log_info("===== 端点性能对比 =====");
+    use colored::*;
+    let title = "🏆 端点性能对比";
+    println!("{}", title.yellow().bold());
+    println!("{}", "-".repeat(28).yellow());
 
     let mut sorted_endpoints: Vec<_> = endpoints
         .iter()
@@ -703,23 +767,22 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 0.0
             };
 
-            log_info(&format!(
-                "{:width$}: 首先接收 {:>6.2}%, 落后时平均延迟 {:>6.2}ms, 总体平均延迟 {:>6.2}ms",
+            println!("{:12}: 首先接收 {:>6.2}%, 落后时平均延迟 {:>6.2}ms, 总体平均延迟 {:>6.2}ms",
                 name,
                 first_percent * 100.0,
                 avg_latency_when_slower,
-                avg_latency_total,
-                width = max_name_length
-            ));
+                avg_latency_total
+            );
         }
     } else if sorted_endpoints.len() == 1 {
-        log_info(&format!("只有一个可用端点 {}, 无法进行对比分析", sorted_endpoints[0].0));
+        output.warning(&format!("只有一个可用端点 {}, 无法进行对比分析", sorted_endpoints[0].0));
     } else {
-        log_info("没有任何可用端点收集到数据，无法进行对比分析");
+        output.error("没有任何可用端点收集到数据，无法进行对比分析");
     }
 
-    log_info("测试完成，正在关闭连接...");
-    log_info("所有连接已关闭，测试结束");
+    output.separator();
+    output.success("测试完成，正在关闭连接...");
+    output.success("所有连接已关闭，测试结束");
 
     Ok(())
 }
@@ -729,6 +792,9 @@ async fn main() -> Result<()> {
     // 加载环境变量
     dotenv().ok();
 
+    let output = ColoredOutput::new();
+    output.header("🚀 Solana gRPC Benchmark Tool");
+    
     let args = Args::parse();
 
     // 收集所有GRPC端点
@@ -767,6 +833,7 @@ async fn main() -> Result<()> {
 
     // 如果没有配置任何端点，使用默认值
     if endpoints.is_empty() {
+        output.warning("No endpoints configured, using default endpoints");
         endpoints.push(GrpcEndpoint {
             name: "PublicNode_1".to_string(),
             url: "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
@@ -778,6 +845,14 @@ async fn main() -> Result<()> {
             token: None,
         });
     }
+
+    output.subheader("📋 Configured Endpoints");
+    for endpoint in &endpoints {
+        output.endpoint_status(&format!("{} - {}", endpoint.name, endpoint.url), EndpointStatus::Connecting);
+    }
+    
+    output.info(&format!("Test duration: {} seconds", args.duration));
+    output.separator();
 
     compare_grpc_endpoints(endpoints, args.duration).await
 }
