@@ -1,0 +1,55 @@
+[package]
+name = "grpc-benchmark-rust"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance gRPC benchmark tool for Solana Yellowstone gRPC endpoints and Jito Block Engine APIs"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-repo/grpc-benchmark-rust"
+
+[[bin]]
+name = "grpc-comparison"
+path = "src/bin/grpc_comparison.rs"
+
+[[bin]]
+name = "benchmark-jito"
+path = "src/bin/benchmark_jito.rs"
+
+[[bin]]
+name = "latency-test"
+path = "src/bin/latency_test.rs"
+
+[dependencies]
+# Yellowstone gRPC
+yellowstone-grpc-client = "8.0.0"
+yellowstone-grpc-proto = "8.0.0"
+tonic = { version = "0.12", features = ["tls", "tls-roots"] }
+
+# HTTP client (for Jito benchmarking)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
+futures = "0.3"
+
+# Configuration and CLI (used by specific binaries)
+clap = { version = "4.5", features = ["derive", "env"] }
+dotenvy = "0.15"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Statistics
+statistical = "1.0"
+
+# Time handling
+chrono = "0.4"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
