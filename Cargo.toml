@@ -1,10 +1,10 @@
 [package]
-name = "grpc-benchmark-rust"
+name = "grpc-benchmark"
 version = "0.1.0"
 edition = "2021"
 description = "High-performance gRPC benchmark tool for Solana Yellowstone gRPC endpoints and Jito Block Engine APIs"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-repo/grpc-benchmark-rust"
+repository = "https://github.com/0xfnzero/grpc-benchmark"
 
 [[bin]]
 name = "grpc-comparison"
@@ -52,4 +52,7 @@ chrono = "0.4"
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
+
+openssl = { version = "0.10.73", features = ["vendored"] }
+
 
