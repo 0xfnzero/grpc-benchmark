@@ -1,201 +1,272 @@
-# gRPC 基准测试工具 (Rust 版本)
+# gRPC 基准测试工具 - 快速使用指南
+[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README-EN.md) | [Telegram](https://t.me/fnzero_group)
 
-一个用 Rust 实现的高性能 gRPC 基准测试工具，用于测试 Solana Yellowstone gRPC 端点和 Jito Block Engine API。
+## 概述
 
-📖 [English Version](README-english.md)
+本指南将帮助您在 Ubuntu 服务器上快速下载和运行 gRPC 基准测试工具，无需编译，直接使用预编译的二进制文件。
 
-## 功能特性
+## 下载文件
 
-- **gRPC 对比测试**: 比较多个 Solana Yellowstone gRPC 端点的性能和可靠性
-- **延迟测试**: 测量 ping 延迟，支持可配置的并发级别
-- **Jito 基准测试**: 对 Jito Block Engine 端点进行 HTTP API 基准测试
-- **实时统计**: 全面的性能指标，包括百分位数和标准差
-- **并发测试**: 支持高并发测试场景
-
-## 安装
-
-### 前置要求
-
-- Rust 1.70+ (通过 [rustup](https://rustup.rs/) 安装)
-
-### 从源码构建
+### 1. 创建目录并下载文件
 
 ```bash
-git clone https://github.com/0xfnzero/grpc-benchmark
-cd grpc-benchmark
-cargo build --release
+# 创建目录
+mkdir -p ~/grpc-benchmark
+cd ~/grpc-benchmark
+
+# 下载二进制文件
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
+
+# 下载运行脚本
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
+
+# 设置执行权限
+chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x run-*.sh
 ```
 
-## 使用方法
-
-### 1. gRPC 端点对比测试
-
-比较多个 gRPC 端点以确定哪个提供最佳性能：
+### 2. 验证下载
 
 ```bash
-# 使用环境变量
-export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"
-export GRPC_NAME_1="端点1"
-export GRPC_TOKEN_1="your-token-1"
+# 检查文件是否存在
+ls -la
 
-export GRPC_URL_2="https://endpoint2.example.com:443"
-export GRPC_NAME_2="端点2"
-export GRPC_TOKEN_2="your-token-2"
-
-cargo run --bin grpc-comparison-
+# 应该看到以下文件：
+# - grpc-comparison (二进制文件)
+# - benchmark-jito (二进制文件)
+# - latency-test (二进制文件)
+# - run-grpc-comparison.sh (脚本)
+# - run-benchmark-jito.sh (脚本)
+# - run-latency-test.sh (脚本)
 ```
 
-### 2. 延迟测试
+## 配置修改
 
-测试单个 gRPC 端点的 ping 延迟：
+### 1. 延迟测试配置
+
+编辑 `run-latency-test.sh` 文件：
 
 ```bash
-# 使用环境变量
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
-export TOTAL_ROUNDS=100
-
-cargo run --bin latency-test
+nano run-latency-test.sh
 ```
 
-### 3. Jito Block Engine 基准测试
+**需要修改的配置：**
+```bash
+# 默认 gRPC 端点配置
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点
+export GRPC_TOKEN=""  # 如果需要认证，填入您的令牌
 
-对 Jito Block Engine HTTP API 进行性能基准测试：
+# 测试参数
+export TOTAL_ROUNDS=10        # 测试轮数
+export PING_INTERVAL_MS=1000  # ping 间隔（毫秒）
+export TEST_TIMEOUT=120       # 超时时间（秒）
+```
+
+### 2. gRPC 比较测试配置
+
+编辑 `run-grpc-comparison.sh` 文件：
 
 ```bash
-# 使用环境变量
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
-export JITO_CONCURRENCY=10
-
-cargo run --bin benchmark-jito
+nano run-grpc-comparison.sh
 ```
 
-## 配置
+**需要修改的配置：**
+```bash
+# 端点 1 配置
+export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点1
+export GRPC_NAME_1="Public_Node"  # 端点1的名称
+export GRPC_TOKEN_1=""  # 端点1的认证令牌
 
-### 环境变量
+# 端点 2 配置
+export GRPC_URL_2="http://64.130.32.158:10900"  # 修改为您的端点2
+export GRPC_NAME_2="Custom_Node"  # 端点2的名称
+export GRPC_TOKEN_2=""  # 端点2的认证令牌
 
-基于 `.env.example` 创建 `.env` 文件：
+# 测试配置
+export GRPC_COMPARISON_DURATION_SEC=30  # 测试持续时间（秒）
+export CONCURRENCY=10                   # 并发级别
+```
+
+### 3. Jito 基准测试配置
+
+编辑 `run-benchmark-jito.sh` 文件：
 
 ```bash
-cp .env.example .env
+nano run-benchmark-jito.sh
 ```
 
-主要配置选项：
+**需要修改的配置：**
+```bash
+# Jito 配置
+export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # 修改为您的 Jito 端点
+export JITO_CONCURRENCY=10  # 并发级别
+```
 
-- `GRPC_URL`: 默认 gRPC 端点 URL
-- `GRPC_TOKEN`: gRPC 端点认证令牌
-- `GRPC_URL_*`, `GRPC_NAME_*`, `GRPC_TOKEN_*`: 多端点配置
-- `TOTAL_ROUNDS`: ping 请求次数 (默认: 50)
-- `CONCURRENCY`: 并发请求限制 (默认: 10)
-- `GRPC_COMPARISON_DURATION_SEC`: 对比测试持续时间 (默认: 30 秒)
-- `JITO_URL`: Jito Block Engine 端点
-- `JITO_CONCURRENCY`: Jito API 并发级别
+## 运行测试
 
-### 快速开始示例
+### 1. 延迟测试
 
 ```bash
-# 1. 配置环境变量
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
-export JITO_CONCURRENCY=10
+# 运行延迟测试
+./run-latency-test.sh
 
-# 2. 运行 Jito 基准测试
-cargo run --bin benchmark-jito
-
-# 3. 配置 gRPC 对比测试
-export GRPC_URL_1="http://64.130.32.158:10900"
-export GRPC_NAME_1="Custom_Node"
-export GRPC_URL_2="https://solana-yellowstone-grpc.publicnode.com:443"
-export GRPC_NAME_2="Public_Node"
-export GRPC_COMPARISON_DURATION_SEC=30
-
-# 4. 运行 gRPC 对比测试
-cargo run --bin grpc-comparison
+# 或者带参数运行
+./run-latency-test.sh --grpc-url "https://your-endpoint.com:443" --total-rounds 20
 ```
 
-## 输出示例
-
-### gRPC 对比测试结果
-
-```
-===== 端点性能对比 =====
-自定义节点      : 首先接收  65.23%, 落后时平均延迟   8.45ms, 总体平均延迟   3.67ms
-公共节点        : 首先接收  34.77%, 落后时平均延迟  15.91ms, 总体平均延迟   7.23ms
-```
-
-### 延迟测试结果
-
-```
-延迟统计:
-  平均延迟: 45.67ms
-  最小延迟: 23.12ms
-  最大延迟: 89.34ms
-  标准差: 12.45ms
-  中位数 (p50): 43.21ms
-  百分位数 (p90): 65.78ms
-  百分位数 (p99): 82.45ms
-  样本数量: 100
-```
-
-### Jito 基准测试结果
-
-```
-Jito URL: https://amsterdam.mainnet.block-engine.jito.wtf
-请求并发量: 10/s
-每 10 秒输出统计信息, 请稍后...
-统计 - 过去 10 秒：发送请求总量:  100, 成功响应量:   85, 平均每秒成功:  8.5, 429 错误次数:  15
-统计 - 过去 10 秒：发送请求总量:  100, 成功响应量:   92, 平均每秒成功:  9.2, 429 错误次数:   8
-```
-
-## 性能特性
-
-- **零拷贝操作**: 高效的内存使用，最小化内存分配
-- **异步/等待**: 非阻塞 I/O 实现最大并发性
-- **连接池**: 复用连接以获得更好的性能
-- **实时指标**: 长时间运行测试期间的实时统计
-- **错误处理**: 健壮的错误恢复和报告机制
-
-## 项目架构
-
-```
-grpc-benchmark-rust/
-├── src/
-│   ├── lib.rs              # 核心库和 protobuf 定义
-│   ├── config.rs           # 配置管理
-│   ├── stats.rs            # 统计计算
-│   ├── grpc_client.rs      # gRPC 客户端封装
-│   ├── error.rs            # 错误类型定义
-│   └── bin/
-│       ├── grpc_comparison.rs        # 多端点对比工具
-│       ├── latency_test.rs           # 延迟测试工具
-│       └── benchmark_jito.rs         # Jito API 基准测试工具
-├── Cargo.toml              # Rust 依赖项
-└── .env.example            # 环境变量配置示例
-```
-
-## 开发
-
-### 运行测试
+### 2. gRPC 端点比较测试
 
 ```bash
-cargo test
+# 运行 gRPC 端点比较测试
+./run-grpc-comparison.sh
+
+# 或者带参数运行
+./run-grpc-comparison.sh --duration 60 --concurrency 20
 ```
 
-### 生产环境构建
+### 3. Jito 基准测试
 
 ```bash
-cargo build --release
+# 运行 Jito 基准测试
+./run-benchmark-jito.sh
+
+# 或者带参数运行
+./run-benchmark-jito.sh --concurrency 15
 ```
 
-### 添加新的基准测试
+## 查看帮助信息
 
-1. 在 `src/bin/` 中创建新的二进制文件
-2. 使用 `src/lib.rs` 中的共享模块
-3. 在 `src/config.rs` 中添加配置选项
-4. 更新 `Cargo.toml` 以包含新的二进制文件
+```bash
+# 查看延迟测试帮助
+./latency-test --help
 
-## 贡献
+# 查看 gRPC 比较测试帮助
+./grpc-comparison --help
 
-1. Fork 仓库
-2. 创建功能分支
-3. 为新功能添加测试
-4. 运行 `cargo fmt` 和 `cargo clippy`
-5. 提交 pull request
+# 查看 Jito 基准测试帮助
+./benchmark-jito --help
+```
+
+## 常见配置示例
+
+### 1. 使用自定义端点
+
+```bash
+# 修改 run-latency-test.sh
+export GRPC_URL="https://your-custom-endpoint.com:443"
+export GRPC_TOKEN="your-auth-token"
+```
+
+### 2. 调整测试参数
+
+```bash
+# 修改 run-grpc-comparison.sh
+export GRPC_COMPARISON_DURATION_SEC=60  # 测试1分钟
+export CONCURRENCY=20                   # 增加并发
+```
+
+### 3. 添加更多端点
+
+```bash
+# 在 run-grpc-comparison.sh 中添加端点3
+export GRPC_URL_3="https://endpoint3.com:443"
+export GRPC_NAME_3="Endpoint_3"
+export GRPC_TOKEN_3=""
+```
+
+## 故障排除
+
+### 1. 权限问题
+
+```bash
+# 如果遇到权限错误
+chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x run-*.sh
+```
+
+### 2. 网络连接问题
+
+```bash
+# 测试网络连接
+curl -I https://solana-yellowstone-grpc.publicnode.com:443
+
+# 检查防火墙设置
+sudo ufw status
+```
+
+### 3. 端点不可用
+
+```bash
+# 测试端点连接
+telnet your-endpoint.com 443
+
+# 或者使用 curl 测试
+curl -v https://your-endpoint.com:443
+```
+
+## 输出说明
+
+### 延迟测试输出
+- 平均延迟时间
+- 最小/最大延迟
+- 延迟分布统计
+- 成功率
+
+### gRPC 比较测试输出
+- 各端点的性能对比
+- 吞吐量统计
+- 错误率统计
+- 延迟对比
+
+### Jito 基准测试输出
+- 区块引擎性能
+- 交易处理速度
+- 错误统计
+
+## 注意事项
+
+1. **网络要求**：确保服务器能访问 gRPC 端点
+2. **认证令牌**：某些端点可能需要 API 令牌
+3. **测试时间**：长时间测试可能产生大量数据
+4. **资源消耗**：高并发测试可能消耗较多 CPU 和内存
+5. **端点限制**：注意端点的速率限制
+
+## 一键下载脚本
+
+如果您想要一键下载所有文件，可以使用以下脚本：
+
+```bash
+#!/bin/bash
+# 一键下载脚本
+
+mkdir -p ~/grpc-benchmark
+cd ~/grpc-benchmark
+
+echo "下载二进制文件..."
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
+
+echo "下载运行脚本..."
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
+
+echo "设置执行权限..."
+chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x run-*.sh
+
+echo "下载完成！"
+echo "请编辑脚本文件配置您的端点信息。"
+```
+
+将此脚本保存为 `download.sh` 并运行：
+
+```bash
+chmod +x download.sh
+./download.sh
+```
