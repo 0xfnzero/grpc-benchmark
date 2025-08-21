@@ -51,7 +51,7 @@ ls -la
 编辑 `run-latency-test.sh` 文件：
 
 ```bash
-nano run-latency-test.sh
+vim run-latency-test.sh
 ```
 
 **需要修改的配置：**
@@ -71,7 +71,7 @@ export TEST_TIMEOUT=120       # 超时时间（秒）
 编辑 `run-grpc-comparison.sh` 文件：
 
 ```bash
-nano run-grpc-comparison.sh
+vim run-grpc-comparison.sh
 ```
 
 **需要修改的配置：**
@@ -96,7 +96,7 @@ export CONCURRENCY=10                   # 并发级别
 编辑 `run-benchmark-jito.sh` 文件：
 
 ```bash
-nano run-benchmark-jito.sh
+vim run-benchmark-jito.sh
 ```
 
 **需要修改的配置：**

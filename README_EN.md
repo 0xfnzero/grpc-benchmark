@@ -51,7 +51,7 @@ ls -la
 Edit the `run-latency-test.sh` file:
 
 ```bash
-nano run-latency-test.sh
+vim run-latency-test.sh
 ```
 
 **Configuration to modify:**
@@ -71,7 +71,7 @@ export TEST_TIMEOUT=120       # Timeout (seconds)
 Edit the `run-grpc-comparison.sh` file:
 
 ```bash
-nano run-grpc-comparison.sh
+vim run-grpc-comparison.sh
 ```
 
 **Configuration to modify:**
@@ -96,7 +96,7 @@ export CONCURRENCY=10                   # Concurrency level
 Edit the `run-benchmark-jito.sh` file:
 
 ```bash
-nano run-benchmark-jito.sh
+vim run-benchmark-jito.sh
 ```
 
 **Configuration to modify:**
