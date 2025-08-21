@@ -1,6 +1,8 @@
 # gRPC Benchmark Tool - Quick Start Guide
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README-EN.md) | [Telegram](https://t.me/fnzero_group)
 
+> This project is a Rust version modified from [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts), providing higher performance and better deployment experience.
+
 ## Overview
 
 This guide will help you quickly download and run the gRPC benchmark tool on Ubuntu servers without compilation, using pre-compiled binary files directly.

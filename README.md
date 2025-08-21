@@ -1,6 +1,8 @@
 # gRPC 基准测试工具 - 快速使用指南
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README-EN.md) | [Telegram](https://t.me/fnzero_group)
 
+> 本项目是参考 [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts) 修改的 Rust 版本，提供更高效的性能和更好的部署体验。
+
 ## 概述
 
 本指南将帮助您在 Ubuntu 服务器上快速下载和运行 gRPC 基准测试工具，无需编译，直接使用预编译的二进制文件。
