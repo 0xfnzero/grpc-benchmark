@@ -1,7 +1,8 @@
 # gRPC Benchmark Tool - Quick Start Guide
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_EN.md) | [Telegram](https://t.me/fnzero_group)
 
-> This project is a Rust version modified from [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts), providing higher performance and better deployment experience.
+> grpc-benchmark is a Rust version built on [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts)
+, offering higher performance and a better deployment experience. ✅
 
 ## Overview
 
