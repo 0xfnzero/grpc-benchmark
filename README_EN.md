@@ -21,14 +21,16 @@ cd ~/grpc-benchmark
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
 
 # Download run scripts
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
 
 # Set execution permissions
-chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
 chmod +x run-*.sh
 ```
 
@@ -42,36 +44,16 @@ ls -la
 # - grpc-comparison (binary file)
 # - benchmark-jito (binary file)
 # - latency-test (binary file)
+# - grpc-vs-fzstream (binary file)
 # - run-grpc-comparison.sh (script)
 # - run-benchmark-jito.sh (script)
 # - run-latency-test.sh (script)
+# - run-grpc-vs-fzstream.sh (script)
 ```
 
-## Configuration
+## gRPC Comparison Test
 
-### 1. Latency Test Configuration
-
-Edit the `run-latency-test.sh` file:
-
-```bash
-vim run-latency-test.sh
-```
-
-**Configuration to modify:**
-```bash
-# Default gRPC endpoint configuration
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint
-export GRPC_TOKEN=""  # If authentication is required, enter your token
-
-# Test parameters
-export TOTAL_ROUNDS=10        # Number of test rounds
-export PING_INTERVAL_MS=1000  # Ping interval (milliseconds)
-export TEST_TIMEOUT=120       # Timeout (seconds)
-```
-
-### 2. gRPC Comparison Test Configuration
-
-Edit the `run-grpc-comparison.sh` file:
+**Edit the `run-grpc-comparison.sh` file:**
 
 ```bash
 vim run-grpc-comparison.sh
@@ -94,9 +76,69 @@ export GRPC_COMPARISON_DURATION_SEC=30  # Test duration (seconds)
 export CONCURRENCY=10                   # Concurrency level
 ```
 
-### 3. Jito Benchmark Test Configuration
+**Run gRPC Endpoint Comparison Test**
+```bash
+# Run gRPC endpoint comparison test
+./run-grpc-comparison.sh
+```
 
-Edit the `run-benchmark-jito.sh` file:
+### 2. gRPC vs FzStream Comparison Test
+
+**Edit the `run-grpc-vs-fzstream.sh` file:**
+
+```bash
+vim run-grpc-vs-fzstream.sh
+```
+
+**Configuration to modify:**
+```bash
+# FzStream configuration
+export FZSTREAM_SERVER_ADDRESS="64.130.37.195:2222"  # FzStream server address
+export AUTH_TOKEN="demo_token_12345"  # FzStream authentication token
+
+# gRPC configuration
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC endpoint
+export GRPC_TOKEN=""  # gRPC authentication token (optional)
+
+# Test configuration
+export TEST_DURATION=30  # Test duration (seconds)
+```
+
+**Run gRPC vs FzStream Comparison Test**
+```bash
+# Run gRPC vs FzStream comparison test
+./run-grpc-vs-fzstream.sh
+```
+
+### 3. Latency Test
+
+**Edit the `run-latency-test.sh` file:**
+
+```bash
+vim run-latency-test.sh
+```
+
+**Configuration to modify:**
+```bash
+# Default gRPC endpoint configuration
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint
+export GRPC_TOKEN=""  # If authentication is required, enter your token
+
+# Test parameters
+export TOTAL_ROUNDS=10        # Number of test rounds
+export PING_INTERVAL_MS=1000  # Ping interval (milliseconds)
+export TEST_TIMEOUT=120       # Timeout (seconds)
+```
+
+**Run Latency Test**
+```bash
+# Run latency test
+./run-latency-test.sh
+```
+
+### 4. Jito Benchmark Test Configuration
+
+**Edit the `run-benchmark-jito.sh` file:**
 
 ```bash
 vim run-benchmark-jito.sh
@@ -109,67 +151,30 @@ export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # Change to y
 export JITO_CONCURRENCY=10  # Concurrency level
 ```
 
-## Running Tests
-
-### 1. Latency Test
-
-```bash
-# Run latency test
-./run-latency-test.sh
-
-# Or run with parameters
-./run-latency-test.sh --grpc-url "https://your-endpoint.com:443" --total-rounds 20
-```
-
-### 2. gRPC Endpoint Comparison Test
-
-```bash
-# Run gRPC endpoint comparison test
-./run-grpc-comparison.sh
-
-# Or run with parameters
-./run-grpc-comparison.sh --duration 60 --concurrency 20
-```
-
-### 3. Jito Benchmark Test
-
+**Run Jito Benchmark Test**
 ```bash
 # Run Jito benchmark test
 ./run-benchmark-jito.sh
-
-# Or run with parameters
-./run-benchmark-jito.sh --concurrency 15
-```
-
-## View Help Information
-
-```bash
-# View latency test help
-./latency-test --help
-
-# View gRPC comparison test help
-./grpc-comparison --help
-
-# View Jito benchmark test help
-./benchmark-jito --help
 ```
 
 ## Common Configuration Examples
 
-### 1. Using Custom Endpoints
-
-```bash
-# Modify run-latency-test.sh
-export GRPC_URL="https://your-custom-endpoint.com:443"
-export GRPC_TOKEN="your-auth-token"
-```
-
-### 2. Adjusting Test Parameters
+### 1. Adjusting Test Parameters
 
 ```bash
 # Modify run-grpc-comparison.sh
 export GRPC_COMPARISON_DURATION_SEC=60  # Test for 1 minute
 export CONCURRENCY=20                   # Increase concurrency
+```
+
+### 2. Configure FzStream vs gRPC Comparison
+
+```bash
+# Modify run-grpc-vs-fzstream.sh
+export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
+export AUTH_TOKEN="your-fzstream-token"
+export GRPC_URL="https://your-grpc-endpoint.com:443"
+export TEST_DURATION=60  # Test for 60 seconds
 ```
 
 ### 3. Adding More Endpoints
@@ -181,13 +186,74 @@ export GRPC_NAME_3="Endpoint_3"
 export GRPC_TOKEN_3=""
 ```
 
+### 4. Using Custom Endpoints
+
+```bash
+# Modify run-latency-test.sh
+export GRPC_URL="https://your-custom-endpoint.com:443"
+export GRPC_TOKEN="your-auth-token"
+```
+
+## View Help Information
+
+```bash
+# View gRPC comparison test help
+./grpc-comparison --help
+
+# View gRPC vs FzStream comparison test help
+./grpc-vs-fzstream --help
+
+# View latency test help
+./latency-test --help
+
+# View Jito benchmark test help
+./benchmark-jito --help
+```
+
+## Common Configuration Examples
+
+### 1. Adjusting Test Parameters
+
+```bash
+# Modify run-grpc-comparison.sh
+export GRPC_COMPARISON_DURATION_SEC=60  # Test for 1 minute
+export CONCURRENCY=20                   # Increase concurrency
+```
+
+### 2. Configure FzStream vs gRPC Comparison
+
+```bash
+# Modify run-grpc-vs-fzstream.sh
+export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
+export AUTH_TOKEN="your-fzstream-token"
+export GRPC_URL="https://your-grpc-endpoint.com:443"
+export TEST_DURATION=60  # Test for 60 seconds
+```
+
+### 3. Adding More Endpoints
+
+```bash
+# Add endpoint3 in run-grpc-comparison.sh
+export GRPC_URL_3="https://endpoint3.com:443"
+export GRPC_NAME_3="Endpoint_3"
+export GRPC_TOKEN_3=""
+```
+
+### 4. Using Custom Endpoints
+
+```bash
+# Modify run-latency-test.sh
+export GRPC_URL="https://your-custom-endpoint.com:443"
+export GRPC_TOKEN="your-auth-token"
+```
+
 ## Troubleshooting
 
 ### 1. Permission Issues
 
 ```bash
 # If you encounter permission errors
-chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
 chmod +x run-*.sh
 ```
 
@@ -230,6 +296,32 @@ curl -v https://your-endpoint.com:443
 - Transaction processing speed
 - Error statistics
 
+### gRPC vs FzStream Comparison Test Output
+- Real-time slot reception comparison
+- Latency statistics (FzStream vs gRPC)
+- First reception statistics
+- Performance analysis report
+- Average latency comparison
+
+**Output Example:**
+```
+[00:18:20.759] gRPC     接收 slot 362449176 : 首次接收
+[00:18:20.759] FzStream 接收 slot 362449176 : 延迟   0.63ms (相对于 gRPC)
+[00:18:21.763] gRPC     接收 slot 362449177 : 首次接收
+[00:18:21.763] FzStream 接收 slot 362449177 : 延迟   1.91ms (相对于 gRPC)
+
+📊 gRPC Performance Analysis
+Total received blocks: 1250 blocks
+First received blocks: 758 (60.64%) blocks
+Delayed received blocks: 492 (39.36%) blocks
+
+📊 FzStream Performance Analysis
+Total received blocks: 1250 blocks
+First received blocks: 492 (39.36%) blocks
+Delayed received blocks: 758 (60.64%) blocks
+Average latency: 1.25ms
+```
+
 ## Important Notes
 
 1. **Network Requirements**: Ensure the server can access gRPC endpoints
@@ -253,14 +345,16 @@ echo "Downloading binary files..."
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
 
 echo "Downloading run scripts..."
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
 
 echo "Setting execution permissions..."
-chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
 chmod +x run-*.sh
 
 echo "Download complete!"

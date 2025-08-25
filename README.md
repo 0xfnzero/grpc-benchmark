@@ -20,14 +20,16 @@ cd ~/grpc-benchmark
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
 
 # 下载运行脚本
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
 
 # 设置执行权限
-chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
 chmod +x run-*.sh
 ```
 
@@ -41,36 +43,16 @@ ls -la
 # - grpc-comparison (二进制文件)
 # - benchmark-jito (二进制文件)
 # - latency-test (二进制文件)
+# - grpc-vs-fzstream (二进制文件)
 # - run-grpc-comparison.sh (脚本)
 # - run-benchmark-jito.sh (脚本)
 # - run-latency-test.sh (脚本)
+# - run-grpc-vs-fzstream.sh (脚本)
 ```
 
-## 配置修改
+##  gRPC 比较测试
 
-### 1. 延迟测试配置
-
-编辑 `run-latency-test.sh` 文件：
-
-```bash
-vim run-latency-test.sh
-```
-
-**需要修改的配置：**
-```bash
-# 默认 gRPC 端点配置
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点
-export GRPC_TOKEN=""  # 如果需要认证，填入您的令牌
-
-# 测试参数
-export TOTAL_ROUNDS=10        # 测试轮数
-export PING_INTERVAL_MS=1000  # ping 间隔（毫秒）
-export TEST_TIMEOUT=120       # 超时时间（秒）
-```
-
-### 2. gRPC 比较测试配置
-
-编辑 `run-grpc-comparison.sh` 文件：
+**编辑 `run-grpc-comparison.sh` 文件：**
 
 ```bash
 vim run-grpc-comparison.sh
@@ -93,9 +75,69 @@ export GRPC_COMPARISON_DURATION_SEC=30  # 测试持续时间（秒）
 export CONCURRENCY=10                   # 并发级别
 ```
 
-### 3. Jito 基准测试配置
+**运行 gRPC 端点比较测试** 
+```bash
+# 运行 gRPC 端点比较测试
+./run-grpc-comparison.sh
+```
 
-编辑 `run-benchmark-jito.sh` 文件：
+### 2. gRPC vs FzStream 对比测试
+
+**编辑 `run-grpc-vs-fzstream.sh` 文件：**
+
+```bash
+vim run-grpc-vs-fzstream.sh
+```
+
+**需要修改的配置：**
+```bash
+# FzStream 配置
+export FZSTREAM_SERVER_ADDRESS="64.130.37.195:2222"  # FzStream 服务器地址
+export AUTH_TOKEN="demo_token_12345"  # FzStream 认证令牌
+
+# gRPC 配置
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC 端点
+export GRPC_TOKEN=""  # gRPC 认证令牌（可选）
+
+# 测试配置
+export TEST_DURATION=30  # 测试持续时间（秒）
+```
+
+**运行 gRPC vs FzStream 对比测试**
+```bash
+# 运行 gRPC vs FzStream 对比测试
+./run-grpc-vs-fzstream.sh
+```
+
+### 3. 延迟测试
+
+**编辑 `run-latency-test.sh` 文件：**
+
+```bash
+vim run-latency-test.sh
+```
+
+**需要修改的配置：**
+```bash
+# 默认 gRPC 端点配置
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点
+export GRPC_TOKEN=""  # 如果需要认证，填入您的令牌
+
+# 测试参数
+export TOTAL_ROUNDS=10        # 测试轮数
+export PING_INTERVAL_MS=1000  # ping 间隔（毫秒）
+export TEST_TIMEOUT=120       # 超时时间（秒）
+```
+
+**运行延迟测试**
+```bash
+# 运行延迟测试
+./run-latency-test.sh
+```
+
+### 4. Jito 基准测试配置
+
+**编辑 `run-benchmark-jito.sh` 文件：**
 
 ```bash
 vim run-benchmark-jito.sh
@@ -108,67 +150,31 @@ export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # 修改为�
 export JITO_CONCURRENCY=10  # 并发级别
 ```
 
-## 运行测试
-
-### 1. 延迟测试
-
-```bash
-# 运行延迟测试
-./run-latency-test.sh
-
-# 或者带参数运行
-./run-latency-test.sh --grpc-url "https://your-endpoint.com:443" --total-rounds 20
-```
-
-### 2. gRPC 端点比较测试
-
-```bash
-# 运行 gRPC 端点比较测试
-./run-grpc-comparison.sh
-
-# 或者带参数运行
-./run-grpc-comparison.sh --duration 60 --concurrency 20
-```
-
-### 3. Jito 基准测试
-
+**运行 Jito 基准测试**
 ```bash
 # 运行 Jito 基准测试
 ./run-benchmark-jito.sh
-
-# 或者带参数运行
-./run-benchmark-jito.sh --concurrency 15
 ```
 
-## 查看帮助信息
-
-```bash
-# 查看延迟测试帮助
-./latency-test --help
-
-# 查看 gRPC 比较测试帮助
-./grpc-comparison --help
-
-# 查看 Jito 基准测试帮助
-./benchmark-jito --help
-```
 
 ## 常见配置示例
 
-### 1. 使用自定义端点
-
-```bash
-# 修改 run-latency-test.sh
-export GRPC_URL="https://your-custom-endpoint.com:443"
-export GRPC_TOKEN="your-auth-token"
-```
-
-### 2. 调整测试参数
+### 1. 调整测试参数
 
 ```bash
 # 修改 run-grpc-comparison.sh
 export GRPC_COMPARISON_DURATION_SEC=60  # 测试1分钟
 export CONCURRENCY=20                   # 增加并发
+```
+
+### 2. 配置 FzStream vs gRPC 对比
+
+```bash
+# 修改 run-grpc-vs-fzstream.sh
+export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
+export AUTH_TOKEN="your-fzstream-token"
+export GRPC_URL="https://your-grpc-endpoint.com:443"
+export TEST_DURATION=60  # 测试60秒
 ```
 
 ### 3. 添加更多端点
@@ -180,34 +186,12 @@ export GRPC_NAME_3="Endpoint_3"
 export GRPC_TOKEN_3=""
 ```
 
-## 故障排除
-
-### 1. 权限问题
+### 4. 使用自定义端点
 
 ```bash
-# 如果遇到权限错误
-chmod +x grpc-comparison benchmark-jito latency-test
-chmod +x run-*.sh
-```
-
-### 2. 网络连接问题
-
-```bash
-# 测试网络连接
-curl -I https://solana-yellowstone-grpc.publicnode.com:443
-
-# 检查防火墙设置
-sudo ufw status
-```
-
-### 3. 端点不可用
-
-```bash
-# 测试端点连接
-telnet your-endpoint.com 443
-
-# 或者使用 curl 测试
-curl -v https://your-endpoint.com:443
+# 修改 run-latency-test.sh
+export GRPC_URL="https://your-custom-endpoint.com:443"
+export GRPC_TOKEN="your-auth-token"
 ```
 
 ## 输出说明
@@ -228,6 +212,32 @@ curl -v https://your-endpoint.com:443
 - 区块引擎性能
 - 交易处理速度
 - 错误统计
+
+### gRPC vs FzStream 对比测试输出
+- 实时slot接收对比
+- 延迟统计 (FzStream vs gRPC)
+- 首次接收统计
+- 性能分析报告
+- 平均延迟对比
+
+**输出示例：**
+```
+[00:18:20.759] gRPC     接收 slot 362449176 : 首次接收
+[00:18:20.759] FzStream 接收 slot 362449176 : 延迟   0.63ms (相对于 gRPC)
+[00:18:21.763] gRPC     接收 slot 362449177 : 首次接收
+[00:18:21.763] FzStream 接收 slot 362449177 : 延迟   1.91ms (相对于 gRPC)
+
+📊 gRPC 性能分析
+总接收区块数: 1250 blocks
+首先接收区块数: 758 (60.64%) blocks
+落后接收区块数: 492 (39.36%) blocks
+
+📊 FzStream 性能分析
+总接收区块数: 1250 blocks
+首先接收区块数: 492 (39.36%) blocks
+落后接收区块数: 758 (60.64%) blocks
+平均延迟: 1.25ms
+```
 
 ## 注意事项
 
@@ -252,14 +262,16 @@ echo "下载二进制文件..."
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
 
 echo "下载运行脚本..."
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
 
 echo "设置执行权限..."
-chmod +x grpc-comparison benchmark-jito latency-test
+chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
 chmod +x run-*.sh
 
 echo "下载完成！"
