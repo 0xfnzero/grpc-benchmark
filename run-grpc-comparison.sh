@@ -8,7 +8,7 @@ export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"
 export GRPC_NAME_1="Public_Node"
 export GRPC_TOKEN_1=""
 
-export GRPC_URL_2="http://64.130.32.158:10900"
+export GRPC_URL_2="http://64.130.37.188:10900"
 export GRPC_NAME_2="Custom_Node"
 export GRPC_TOKEN_2=""
 

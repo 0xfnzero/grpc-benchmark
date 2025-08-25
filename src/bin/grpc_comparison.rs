@@ -16,6 +16,13 @@ use yellowstone_grpc_proto::prelude::{
 use tonic::transport::{ClientTlsConfig, Certificate};
 use grpc_benchmark::output::{ColoredOutput, EndpointStatus};
 
+// Initialize rustls crypto provider
+use rustls;
+
+fn init_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -789,6 +796,9 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize crypto provider first
+    init_crypto_provider();
+    
     // 加载环境变量
     dotenv().ok();
 
