@@ -56,9 +56,6 @@ cat > lib/run-grpc-comparison.sh << 'EOF'
 # gRPC 端点比较测试脚本
 # 用于比较多个 gRPC 端点的性能
 
-# 设置脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # 环境变量配置
 export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"
 export GRPC_NAME_1="Public_Node"
@@ -74,7 +71,7 @@ export CONCURRENCY=10
 
 # 运行 gRPC 比较测试
 echo "开始 gRPC 端点比较测试..."
-"$SCRIPT_DIR/grpc-comparison" "$@"
+./grpc-comparison
 EOF
 
 # 生成 benchmark-jito.sh
@@ -84,16 +81,13 @@ cat > lib/run-benchmark-jito.sh << 'EOF'
 # Jito 区块引擎基准测试脚本
 # 用于测试 Jito Block Engine API 性能
 
-# 设置脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Jito 配置
 export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
 export JITO_CONCURRENCY=10
 
 # 运行 Jito 基准测试
 echo "开始 Jito 区块引擎基准测试..."
-"$SCRIPT_DIR/benchmark-jito" "$@"
+./benchmark-jito
 EOF
 
 # 生成 latency-test.sh
@@ -102,9 +96,6 @@ cat > lib/run-latency-test.sh << 'EOF'
 
 # 延迟测试脚本
 # 用于测试 gRPC 端点的延迟性能
-
-# 设置脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 默认 gRPC 端点配置
 export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
@@ -117,7 +108,7 @@ export TEST_TIMEOUT=120
 
 # 运行延迟测试
 echo "开始延迟测试..."
-"$SCRIPT_DIR/latency-test" "$@"
+./latency-test
 EOF
 
 # 生成 grpc-vs-fzstream.sh
@@ -127,19 +118,16 @@ cat > lib/run-grpc-vs-fzstream.sh << 'EOF'
 # gRPC vs FzStream 性能对比测试脚本
 # 用于对比 gRPC 和 FzStream 在接收 PumpFunTradeEvent 事件方面的性能
 
-# 设置脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # FzStream 配置
-export FZSTREAM_SERVER_ADDRESS="${FZSTREAM_SERVER_ADDRESS:-127.0.0.1:2222}"
-export AUTH_TOKEN="${AUTH_TOKEN:-demo_token}"
+export FZSTREAM_SERVER_ADDRESS=127.0.0.1:2222
+export AUTH_TOKEN=demo_token
 
 # gRPC 配置
-export GRPC_URL="${GRPC_URL:-https://solana-yellowstone-grpc.publicnode.com:443}"
-export GRPC_TOKEN="${GRPC_TOKEN:-}"
+export GRPC_URL=https://solana-yellowstone-grpc.publicnode.com:443
+export GRPC_TOKEN=
 
 # 运行性能对比测试
-"$SCRIPT_DIR/grpc-vs-fzstream" "$@"
+./grpc-vs-fzstream
 EOF
 
 # 设置所有 shell 脚本的执行权限
