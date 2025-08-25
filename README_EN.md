@@ -8,30 +8,18 @@
 
 This guide will help you quickly download and run the gRPC benchmark tool on Ubuntu servers without compilation, using pre-compiled binary files directly.
 
-## Download Files
+## Install Speed Test Tool
 
-### 1. Create Directory and Download Files
+### 1. Download Installation Script
 
 ```bash
-# Create directory
-mkdir -p ~/grpc-benchmark
-cd ~/grpc-benchmark
+cd /root
 
-# Download binary files
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
+# Get installation script
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/install.sh
 
-# Download run scripts
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
-
-# Set execution permissions
-chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
-chmod +x run-*.sh
+# Execute installation script
+sudo ./install.sh
 ```
 
 ### 2. Verify Download
@@ -283,41 +271,3 @@ Average latency: 1.25ms
 3. **Test Duration**: Long-term tests may generate large amounts of data
 4. **Resource Consumption**: High concurrency tests may consume more CPU and memory
 5. **Endpoint Limits**: Pay attention to endpoint rate limits
-
-## One-Click Download Script
-
-If you want to download all files with one click, you can use the following script:
-
-```bash
-#!/bin/bash
-# One-click download script
-
-mkdir -p ~/grpc-benchmark
-cd ~/grpc-benchmark
-
-echo "Downloading binary files..."
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
-
-echo "Downloading run scripts..."
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
-
-echo "Setting execution permissions..."
-chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
-chmod +x run-*.sh
-
-echo "Download complete!"
-echo "Please edit the script files to configure your endpoint information."
-```
-
-Save this script as `download.sh` and run:
-
-```bash
-chmod +x download.sh
-./download.sh
-```

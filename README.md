@@ -7,30 +7,18 @@
 
 本指南将帮助您在 Ubuntu 服务器上快速下载和运行 gRPC 基准测试工具，无需编译，直接使用预编译的二进制文件。
 
-## 下载文件
+## 安装测速工具
 
-### 1. 创建目录并下载文件
+### 1. 下载安装脚本
 
 ```bash
-# 创建目录
-mkdir -p ~/grpc-benchmark
-cd ~/grpc-benchmark
+cd /root
 
-# 下载二进制文件
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
+# 获取安装脚本
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/install.sh
 
-# 下载运行脚本
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
-
-# 设置执行权限
-chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
-chmod +x run-*.sh
+# 执行安装脚本
+sudo ./install.sh
 ```
 
 ### 2. 验证下载
@@ -246,41 +234,3 @@ export GRPC_TOKEN="your-auth-token"
 3. **测试时间**：长时间测试可能产生大量数据
 4. **资源消耗**：高并发测试可能消耗较多 CPU 和内存
 5. **端点限制**：注意端点的速率限制
-
-## 一键下载脚本
-
-如果您想要一键下载所有文件，可以使用以下脚本：
-
-```bash
-#!/bin/bash
-# 一键下载脚本
-
-mkdir -p ~/grpc-benchmark
-cd ~/grpc-benchmark
-
-echo "下载二进制文件..."
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-comparison
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/benchmark-jito
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/latency-test
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/grpc-vs-fzstream
-
-echo "下载运行脚本..."
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-comparison.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-benchmark-jito.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-latency-test.sh
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.1/run-grpc-vs-fzstream.sh
-
-echo "设置执行权限..."
-chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
-chmod +x run-*.sh
-
-echo "下载完成！"
-echo "请编辑脚本文件配置您的端点信息。"
-```
-
-将此脚本保存为 `download.sh` 并运行：
-
-```bash
-chmod +x download.sh
-./download.sh
-```
