@@ -18,6 +18,10 @@ path = "src/bin/benchmark_jito.rs"
 name = "latency-test"
 path = "src/bin/latency_test.rs"
 
+[[bin]]
+name = "grpc-vs-fzstream"
+path = "src/bin/grpc_vs_fzstream.rs"
+
 [dependencies]
 # Yellowstone gRPC
 yellowstone-grpc-client = "8.0.0"
@@ -58,5 +62,11 @@ anyhow = "1.0"
 thiserror = "1.0"
 
 openssl = { version = "0.10.73", features = ["vendored"] }
+
+fzstream-client  = { git = "https://github.com/0xfnzero/fzstream-client" }
+fzstream-common  = { git = "https://github.com/0xfnzero/fzstream-common" }
+
+rustls = { version = "0.23", features = ["ring"] }
+solana-streamer-sdk = "0.3.10"
 
 

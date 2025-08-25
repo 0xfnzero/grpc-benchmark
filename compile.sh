@@ -39,11 +39,13 @@ echo "复制二进制文件到 lib 目录..."
 cp "$BINARY_DIR/grpc-comparison" lib/
 cp "$BINARY_DIR/benchmark-jito" lib/
 cp "$BINARY_DIR/latency-test" lib/
+cp "$BINARY_DIR/grpc-vs-fzstream" lib/
 
 # 设置二进制文件执行权限
 chmod +x lib/grpc-comparison
 chmod +x lib/benchmark-jito
 chmod +x lib/latency-test
+chmod +x lib/grpc-vs-fzstream
 
 echo "生成 shell 脚本..."
 
@@ -118,6 +120,28 @@ echo "开始延迟测试..."
 "$SCRIPT_DIR/latency-test" "$@"
 EOF
 
+# 生成 grpc-vs-fzstream.sh
+cat > lib/run-grpc-vs-fzstream.sh << 'EOF'
+#!/bin/bash
+
+# gRPC vs FzStream 性能对比测试脚本
+# 用于对比 gRPC 和 FzStream 在接收 PumpFunTradeEvent 事件方面的性能
+
+# 设置脚本目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# FzStream 配置
+export FZSTREAM_SERVER_ADDRESS="${FZSTREAM_SERVER_ADDRESS:-127.0.0.1:2222}"
+export AUTH_TOKEN="${AUTH_TOKEN:-demo_token}"
+
+# gRPC 配置
+export GRPC_URL="${GRPC_URL:-https://solana-yellowstone-grpc.publicnode.com:443}"
+export GRPC_TOKEN="${GRPC_TOKEN:-}"
+
+# 运行性能对比测试
+"$SCRIPT_DIR/grpc-vs-fzstream" "$@"
+EOF
+
 # 设置所有 shell 脚本的执行权限
 chmod +x lib/*.sh
 
@@ -127,10 +151,35 @@ echo "编译完成！"
 echo "=========================================="
 echo ""
 echo "生成的文件："
-echo "- lib/grpc-comparison (二进制文件)"
-echo "- lib/benchmark-jito (二进制文件)"
-echo "- lib/latency-test (二进制文件)"
-echo "- lib/grpc-comparison.sh (shell 脚本)"
-echo "- lib/benchmark-jito.sh (shell 脚本)"
-echo "- lib/latency-test.sh (shell 脚本)"
+echo "二进制文件："
+echo "- lib/grpc-comparison"
+echo "- lib/benchmark-jito"
+echo "- lib/latency-test"
+echo "- lib/grpc-vs-fzstream"
+echo ""
+echo "Shell 脚本："
+echo "- lib/run-grpc-comparison.sh"
+echo "- lib/run-benchmark-jito.sh"
+echo "- lib/run-latency-test.sh"
+echo "- lib/run-grpc-vs-fzstream.sh"
+echo ""
+echo "使用方法："
+echo "1. gRPC 端点性能比较:"
+echo "   ./lib/run-grpc-comparison.sh"
+echo ""
+echo "2. Jito Block Engine 基准测试:"
+echo "   ./lib/run-benchmark-jito.sh"
+echo ""
+echo "3. 延迟测试:"
+echo "   ./lib/run-latency-test.sh"
+echo ""
+echo "4. gRPC vs FzStream 性能对比:"
+echo "   ./lib/run-grpc-vs-fzstream.sh"
+echo ""
+echo "自定义配置示例："
+echo "FZSTREAM_SERVER_ADDRESS=\"your-server:8080\" \\"
+echo "GRPC_URL=\"https://your-grpc-endpoint.com\" \\"
+echo "AUTH_TOKEN=\"your_token\" \\"
+echo "GRPC_TOKEN=\"your_grpc_token\" \\"
+echo "./lib/run-grpc-vs-fzstream.sh"
 echo ""
