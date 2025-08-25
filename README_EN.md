@@ -94,7 +94,7 @@ vim run-grpc-vs-fzstream.sh
 ```bash
 # FzStream configuration
 export FZSTREAM_SERVER_ADDRESS="64.130.37.195:2222"  # FzStream server address
-export AUTH_TOKEN="demo_token_12345"  # FzStream authentication token
+export AUTH_TOKEN="demo_token"  # FzStream authentication token
 
 # gRPC configuration
 export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC endpoint
@@ -194,22 +194,6 @@ export GRPC_URL="https://your-custom-endpoint.com:443"
 export GRPC_TOKEN="your-auth-token"
 ```
 
-## View Help Information
-
-```bash
-# View gRPC comparison test help
-./grpc-comparison --help
-
-# View gRPC vs FzStream comparison test help
-./grpc-vs-fzstream --help
-
-# View latency test help
-./latency-test --help
-
-# View Jito benchmark test help
-./benchmark-jito --help
-```
-
 ## Common Configuration Examples
 
 ### 1. Adjusting Test Parameters
@@ -245,36 +229,6 @@ export GRPC_TOKEN_3=""
 # Modify run-latency-test.sh
 export GRPC_URL="https://your-custom-endpoint.com:443"
 export GRPC_TOKEN="your-auth-token"
-```
-
-## Troubleshooting
-
-### 1. Permission Issues
-
-```bash
-# If you encounter permission errors
-chmod +x grpc-comparison benchmark-jito latency-test grpc-vs-fzstream
-chmod +x run-*.sh
-```
-
-### 2. Network Connection Issues
-
-```bash
-# Test network connection
-curl -I https://solana-yellowstone-grpc.publicnode.com:443
-
-# Check firewall settings
-sudo ufw status
-```
-
-### 3. Endpoint Unavailable
-
-```bash
-# Test endpoint connection
-telnet your-endpoint.com 443
-
-# Or use curl to test
-curl -v https://your-endpoint.com:443
 ```
 
 ## Output Description

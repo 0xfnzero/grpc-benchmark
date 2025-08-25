@@ -93,7 +93,7 @@ vim run-grpc-vs-fzstream.sh
 ```bash
 # FzStream 配置
 export FZSTREAM_SERVER_ADDRESS="64.130.37.195:2222"  # FzStream 服务器地址
-export AUTH_TOKEN="demo_token_12345"  # FzStream 认证令牌
+export AUTH_TOKEN="demo_token"  # FzStream 认证令牌
 
 # gRPC 配置
 export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC 端点
