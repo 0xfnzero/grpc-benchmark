@@ -18,6 +18,9 @@ cd /root
 # Get installation script
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/install.sh
 
+# Grant executable permission
+chmod +x install.sh
+
 # Execute installation script
 sudo ./install.sh
 ```

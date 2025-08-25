@@ -17,6 +17,9 @@ cd /root
 # 获取安装脚本
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/install.sh
 
+# 授权可执行权限
+chmod +x install.sh
+
 # 执行安装脚本
 sudo ./install.sh
 ```
