@@ -63,8 +63,8 @@ thiserror = "1.0"
 
 openssl = { version = "0.10.73", features = ["vendored"] }
 
-fzstream-client  = { git = "https://github.com/0xfnzero/fzstream-client" }
-fzstream-common  = { git = "https://github.com/0xfnzero/fzstream-common" }
+fzstream-client  = { git = "https://github.com/0xfnzero/fzstream-client", branch="feature/v2" }
+fzstream-common  = { git = "https://github.com/0xfnzero/fzstream-common", branch="feature/v2" }
 
 rustls = { version = "0.23", features = ["ring"] }
 solana-streamer-sdk = "0.3.10"

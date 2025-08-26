@@ -7,17 +7,17 @@ use fzstream_common::{EventType, EventTypeFilter};
 
 pub struct FzsClient {
     endpoint_name: String,
-    server_address: String,
+    endpoint: String,
     auth_token: Option<String>,
 }
 
 impl FzsClient {
-    pub async fn connect(server_address: &str, auth_token: Option<&str>, endpoint_name: String) -> Result<Self> {
-        info!("Connecting to {}: {}", endpoint_name, server_address);
+    pub async fn connect(endpoint: &str, auth_token: Option<&str>, endpoint_name: String) -> Result<Self> {
+        info!("Connecting to {}: {}", endpoint_name, endpoint);
 
         // Test connection by creating a client and connecting
         let config = StreamClientConfig {
-            server_address: server_address.to_string(),
+            endpoint: endpoint.to_string(),
             auth_token: auth_token.map(|s| s.to_string()),
             ..Default::default()
         };
@@ -31,7 +31,7 @@ impl FzsClient {
         // Connection successful, store the parameters
         Ok(Self {
             endpoint_name,
-            server_address: server_address.to_string(),
+            endpoint: endpoint.to_string(),
             auth_token: auth_token.map(|s| s.to_string()),
         })
     }
@@ -40,8 +40,8 @@ impl FzsClient {
         &self.endpoint_name
     }
 
-    pub fn get_server_address(&self) -> &str {
-        &self.server_address
+    pub fn get_endpoint(&self) -> &str {
+        &self.endpoint
     }
 
     pub fn get_auth_token(&self) -> Option<&str> {
@@ -58,7 +58,7 @@ impl FzsClient {
 
     pub async fn create_client(&self) -> Result<FzStreamClient> {
         let config = StreamClientConfig {
-            server_address: self.server_address.clone(),
+            endpoint: self.endpoint.clone(),
             auth_token: self.auth_token.clone(),
             ..Default::default()
         };

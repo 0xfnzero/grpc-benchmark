@@ -233,7 +233,7 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
                     log_info(&format!("连接到 FzStream: {}", address));
 
                     let mut config = StreamClientConfig::default();
-                    config.server_address = address.clone();
+                    config.endpoint = address.clone();
                     config.auth_token = Some(auth_token.clone());
                     
 
