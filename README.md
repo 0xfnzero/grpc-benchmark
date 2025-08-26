@@ -22,6 +22,9 @@ chmod +x install.sh
 
 # 执行安装脚本
 sudo ./install.sh
+
+# 进入grpc-benchmark
+cd grpc-benchmark
 ```
 
 ### 2. 验证下载
