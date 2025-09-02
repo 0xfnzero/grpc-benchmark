@@ -1817,7 +1817,7 @@ dependencies = [
 [[package]]
 name = "fzstream-client"
 version = "0.1.0"
-source = "git+https://github.com/0xfnzero/fzstream-client#09b7c7d856b55afb1a2e55c6e0c3bd183a0e4bb2"
+source = "git+https://github.com/0xfnzero/fzstream-client?branch=feature%2Fv2#ba77cf3628349cf1aa232213276da5a9a71674db"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1834,6 +1834,7 @@ dependencies = [
  "socket2 0.6.0",
  "solana-streamer-sdk",
  "tokio",
+ "url",
  "uuid",
  "zstd",
 ]
@@ -1841,7 +1842,7 @@ dependencies = [
 [[package]]
 name = "fzstream-common"
 version = "0.1.0"
-source = "git+https://github.com/0xfnzero/fzstream-common#6f7a6cf5d3a9ea6193cc28c006645ee1855e282f"
+source = "git+https://github.com/0xfnzero/fzstream-common?branch=feature%2Fv2#29d118a104aa4e5d1ccf6670d7f190f331690d71"
 dependencies = [
  "bincode 2.0.1",
  "lz4",
