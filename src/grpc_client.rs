@@ -2,11 +2,11 @@ use crate::error::{BenchmarkError, Result};
 use std::collections::HashMap;
 use std::time::Duration;
 use tonic::transport::ClientTlsConfig;
-use tracing::{debug, info};
+use tracing::info;
 
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::prelude::{
-    CommitmentLevel, SubscribeRequest, SubscribeRequestFilterSlots, SubscribeUpdate,
+    CommitmentLevel, SubscribeRequest, SubscribeRequestFilterSlots,
 };
 
 pub struct GrpcClient {

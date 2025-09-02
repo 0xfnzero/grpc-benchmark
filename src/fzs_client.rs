@@ -1,9 +1,9 @@
 use crate::error::{BenchmarkError, Result};
-use std::time::Duration;
-use tracing::{debug, info};
+use tracing::info;
 
 use fzstream_client::{FzStreamClient, StreamClientConfig};
-use fzstream_common::{EventType, EventTypeFilter};
+use fzstream_common::EventTypeFilter;
+use solana_streamer_sdk::streaming::event_parser::common::EventType;
 
 pub struct FzsClient {
     endpoint_name: String,
@@ -49,10 +49,10 @@ impl FzsClient {
     }
 
     pub fn create_event_filter() -> EventTypeFilter {
-        EventTypeFilter::include_only(vec![
-            EventType::PumpSwapBuy,
-            EventType::PumpSwapSell,
-            EventType::PumpSwapCreate,
+        EventTypeFilter::allow_only(vec![
+            EventType::PumpFunBuy,
+            EventType::PumpFunSell,
+            EventType::PumpSwapCreatePool,
         ])
     }
 

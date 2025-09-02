@@ -3,6 +3,7 @@ use console::{style, Term};
 use std::io::Write;
 
 pub struct ColoredOutput {
+    #[allow(dead_code)]
     term: Term,
 }
 

@@ -41,6 +41,7 @@ struct Args {
     timeout: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Clone)]
 struct PingInfo {
     id: i32,
@@ -236,6 +237,7 @@ async fn test_grpc_latency_serial(
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn test_grpc_latency_continuous(
     url: &str,
     total_rounds: usize,

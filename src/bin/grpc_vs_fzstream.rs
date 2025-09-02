@@ -1,6 +1,7 @@
 use grpc_benchmark::Result;
 use fzstream_client::{FzStreamClient, StreamClientConfig};
-use fzstream_common::{match_event, EventType, EventTypeFilter};
+use fzstream_common::EventTypeFilter;
+use solana_streamer_sdk::streaming::event_parser::common::EventType;
 use solana_streamer_sdk::match_event as solana_match_event;
 use solana_streamer_sdk::streaming::event_parser::core::UnifiedEvent;
 use solana_streamer_sdk::streaming::event_parser::protocols::BlockMetaEvent;
@@ -21,11 +22,17 @@ use tokio::time::{interval, sleep};
 
 
 // Program IDs for major Solana DeFi protocols
+#[allow(dead_code)]
 const PUMPFUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+#[allow(dead_code)]
 const PUMPSWAP_PROGRAM_ID: &str = "PSwpkKNJhTNm5CbhHTNNfCEEF7ZdA8fxh4Wj1S6GzPo";
+#[allow(dead_code)]
 const BONK_PROGRAM_ID: &str = "treaf4wWBBty3fHdyBpo35Mz84M8k3heKXmjmi9vFt5";
+#[allow(dead_code)]
 const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
+#[allow(dead_code)]
 const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUQpMAS4ZnukSFGUvJ";
+#[allow(dead_code)]
 const RAYDIUM_AMM_V4_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
 
 // 添加格式化日志函数，参考 grpc_comparison.rs
@@ -51,19 +58,15 @@ fn log_info(msg: &str) {
 }
 
 // 全局变量来存储最大名称长度
-static mut MAX_NAME_LENGTH: usize = 10;
-static mut MAX_NAME_LENGTH_INIT: std::sync::Once = std::sync::Once::new();
+use std::sync::OnceLock;
+static MAX_NAME_LENGTH: OnceLock<usize> = OnceLock::new();
 
 fn set_max_name_length(length: usize) {
-    unsafe {
-        MAX_NAME_LENGTH_INIT.call_once(|| {
-            MAX_NAME_LENGTH = length;
-        });
-    }
+    let _ = MAX_NAME_LENGTH.set(length);
 }
 
 fn get_max_name_length() -> usize {
-    unsafe { MAX_NAME_LENGTH }
+    *MAX_NAME_LENGTH.get().unwrap_or(&10)
 }
 
 struct LogParts {
@@ -104,6 +107,7 @@ fn extract_log_parts(msg: &str) -> Option<LogParts> {
 #[derive(Debug, Clone)]
 struct BlockData {
     endpoint: String,
+    #[allow(dead_code)]
     slot: u64,
     timestamp: Instant,
 }
@@ -117,6 +121,7 @@ struct EndpointStats {
     is_available: bool,
     has_received_data: bool,
     first_slot: Option<u64>,
+    #[allow(dead_code)]
     processed_slots: HashSet<u64>, // 记录已处理的slot，避免重复
 }
 
@@ -225,19 +230,19 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
         let started_formal_stats = started_formal_stats.clone();
         let processed_slots = processed_slots.clone();
         let dedup_mutex = dedup_mutex.clone();
-        let test_end_time = end_time;
+        let _test_end_time = end_time;
 
         match endpoint.endpoint_type {
             EndpointType::FzStream { address, auth_token } => {
                 let task = tokio::spawn(async move {
                     log_info(&format!("连接到 FzStream: {}", address));
 
-                    let mut config = StreamClientConfig::default();
-                    config.endpoint = address.clone();
-                    config.auth_token = Some(auth_token.clone());
-                    
-
-                    let mut client = FzStreamClient::with_config(config);
+                    let mut client = FzStreamClient::builder()
+                        .server_address(&address)
+                        .auth_token(&auth_token)
+                        .connection_timeout(Duration::from_secs(5))
+                        .build()
+                        .expect("Failed to create client");
                     
                     if let Err(e) = client.connect().await {
                         log_info(&format!("连接 {} 失败: {:?}", endpoint_name, e));
@@ -266,8 +271,7 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
                     let event_callback = move |event: Box<dyn UnifiedEvent>| {
                         
                         // 只处理 BlockMetaEvent
-                        use fzstream_common::match_event;
-                        match_event!(event, {
+                        solana_match_event!(event, {
                             BlockMetaEvent => |e: BlockMetaEvent| {
                                 let current_slot = e.slot;
                                 let timestamp = Instant::now();
@@ -316,28 +320,20 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
                         });
                     };
                     
-                    // 启动订阅任务，参考 basic_quic_test.rs 的做法
-                    // 只订阅 BlockMeta 事件  
-                    let fzstream_filter = EventTypeFilter::include_only(vec![
+                    // 设置事件过滤器
+                    let event_filter = EventTypeFilter::allow_only(vec![
                         EventType::BlockMeta,
                     ]);
-                    
-                    let client_handle = tokio::spawn(async move {
-                        if let Err(e) = client.subscribe_events_with_filter(fzstream_filter, event_callback).await {
-                            println!("❌ FzStream streaming error: {}", e);
-                        }
-                        
-                        // 保持连接活跃，参考 basic_quic_test.rs
-                        loop {
-                            sleep(Duration::from_millis(100)).await;
-                        }
-                    });
-                    
+                
+                    let _handle = client.subscribe_with_filter(event_filter, event_callback).await.unwrap();   
+
                     // 给事件流一些时间来建立连接，参考 basic_quic_test.rs
                     sleep(Duration::from_millis(5000)).await;
                     
                     // 保持任务运行
-                    let _ = client_handle.await;
+                    let _ = _handle.await;
+
+                    println!("================✅ 事件订阅成功==================");     
                 });
                 tasks.push(task);
             },
@@ -346,7 +342,7 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
                 let task = tokio::spawn(async move {
                     log_info(&format!("连接到 gRPC: {}", url));
                     
-                    let grpc_client = match YellowstoneGrpc::new_immediate(
+                    let grpc_client = match YellowstoneGrpc::new(
                         url.clone(),
                         token.clone(),
                     ) {
@@ -431,19 +427,27 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
                                     let started_formal_stats_clone = started_formal_stats_for_callback.clone();
                                     let processed_slots_clone = processed_slots_for_callback.clone();
                                     
-                                    tokio::spawn(async move {
-                                        handle_block_event(
-                                            endpoint_name_clone,
-                                            current_slot,
-                                            timestamp,
-                                            block_data_by_slot_clone,
-                                            endpoint_stats_clone,
-                                            first_slot_received_clone,
-                                            active_endpoints_clone,
-                                            first_received_slots_clone,
-                                            started_formal_stats_clone,
-                                            processed_slots_clone,
-                                        ).await;
+                                    // 使用单独的线程和 Tokio 运行时来执行异步任务
+                                    std::thread::spawn(move || {
+                                        let rt = tokio::runtime::Builder::new_current_thread()
+                                            .enable_time()
+                                            .enable_io()
+                                            .build()
+                                            .unwrap();
+                                        rt.block_on(async move {
+                                            handle_block_event(
+                                                endpoint_name_clone,
+                                                current_slot,
+                                                timestamp,
+                                                block_data_by_slot_clone,
+                                                endpoint_stats_clone,
+                                                first_slot_received_clone,
+                                                active_endpoints_clone,
+                                                first_received_slots_clone,
+                                                started_formal_stats_clone,
+                                                processed_slots_clone,
+                                            ).await;
+                                        });
                                     });
                                 }
                                 handled = true;
@@ -568,7 +572,7 @@ async fn compare_endpoints(endpoints: Vec<Endpoint>, test_duration_sec: u64) -> 
     println!("{}", title.yellow().bold());
     println!("{}", "-".repeat(28).yellow());
     
-    for (endpoint_name, first_percentage, avg_behind_latency, overall_avg_latency, total_received) in endpoint_results {
+    for (endpoint_name, first_percentage, avg_behind_latency, overall_avg_latency, _total_received) in endpoint_results {
         println!("{:width$} : 首先接收 {:6.2}%, 落后时平均延迟 {:7.2}ms, 总体平均延迟 {:7.2}ms", 
                 endpoint_name, first_percentage, avg_behind_latency, overall_avg_latency,
                 width = get_max_name_length());
@@ -615,7 +619,9 @@ async fn handle_block_event(
 
     // 标记此端点已收到数据
     let mut first_received = first_slot_received.lock().await;
-    if !first_received.get(&endpoint_name).copied().unwrap_or(false) {
+    let already_received = first_received.get(&endpoint_name).copied().unwrap_or(false);
+    
+    if !already_received {
         first_received.insert(endpoint_name.clone(), true);
         drop(first_received);
 
@@ -643,8 +649,10 @@ async fn handle_block_event(
             let active = active_endpoints.lock().await;
             let received_data_count = first_slots.len();
             let total_active_endpoints = active.len();
-
-            if received_data_count == total_active_endpoints && received_data_count >= 2 {
+            
+            // 修改条件：只要有2个或以上端点接收到数据就开始统计
+            // 原条件太严格，要求所有端点都接收到数据
+            if received_data_count >= 2 {
                 drop(first_slots);
                 drop(active);
 
@@ -665,7 +673,7 @@ async fn handle_block_event(
     }
 
     // 等待其他端点数据以进行比较 - 增加等待时间以适应高延迟场景
-    sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // 检查这个slot是否已经被处理过（避免重复输出）
     {
@@ -676,12 +684,8 @@ async fn handle_block_event(
         processed.insert(current_slot);
     }
 
-    // 进行实时统计
+    // 进行实时统计 - 改为检查实际收到数据的端点数
     let active = active_endpoints.lock().await;
-    if active.len() < 2 {
-        drop(active);
-        return;
-    }
 
     let block_data = block_data_by_slot.lock().await;
     let block_data_list = match block_data.get(&current_slot) {
@@ -695,10 +699,10 @@ async fn handle_block_event(
         .map(|bd| bd.endpoint.clone())
         .collect();
 
-    // 不再等待所有端点，立即处理可用数据
-    // 这样可以避免由于高延迟导致的数据丢失
+    // 只有当有2个或以上端点收到同一个slot的数据时才进行比较
+    // 这样才能计算延迟差异
     
-    if received_endpoints.len() >= 1 {  // 至少有1个端点有数据就处理
+    if received_endpoints.len() >= 2 {  // 至少有2个端点有数据才能比较
         let mut stats = endpoint_stats.lock().await;
         for endpoint in active.iter() {
             if block_data_list
@@ -729,6 +733,7 @@ async fn handle_block_event(
         let first_endpoint = sorted_data
             .first()
             .unwrap();
+        
 
         let mut stats = endpoint_stats.lock().await;
 

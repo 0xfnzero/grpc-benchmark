@@ -13,7 +13,7 @@ use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::prelude::{
     subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest, SubscribeRequestFilterSlots,
 };
-use tonic::transport::{ClientTlsConfig, Certificate};
+use tonic::transport::ClientTlsConfig;
 use grpc_benchmark::output::{ColoredOutput, EndpointStatus};
 
 // Initialize rustls crypto provider
@@ -110,19 +110,15 @@ fn log_info(msg: &str) {
 }
 
 // 全局变量来存储最大名称长度
-static mut MAX_NAME_LENGTH: usize = 0;
-static mut MAX_NAME_LENGTH_INIT: std::sync::Once = std::sync::Once::new();
+use std::sync::OnceLock;
+static MAX_NAME_LENGTH: OnceLock<usize> = OnceLock::new();
 
 fn set_max_name_length(length: usize) {
-    unsafe {
-        MAX_NAME_LENGTH_INIT.call_once(|| {
-            MAX_NAME_LENGTH = length;
-        });
-    }
+    let _ = MAX_NAME_LENGTH.set(length);
 }
 
 fn get_max_name_length() -> usize {
-    unsafe { MAX_NAME_LENGTH }
+    *MAX_NAME_LENGTH.get().unwrap_or(&0)
 }
 
 struct LogParts {
@@ -285,7 +281,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
             if active_endpoint_data.len() >= 2 {
                 // 注意：total_received在主任务循环中计算，这里不重复计算
 
-                let earliest_timestamp = active_endpoint_data
+                let _earliest_timestamp = active_endpoint_data
                     .iter()
                     .map(|bd| bd.timestamp)
                     .min()
@@ -563,7 +559,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                     .cloned()
                                     .collect();
 
-                                let earliest_timestamp = active_endpoint_data
+                                let _earliest_timestamp = active_endpoint_data
                                     .iter()
                                     .map(|bd| bd.timestamp)
                                     .min()
