@@ -16,7 +16,7 @@ This guide will help you quickly download and run the gRPC benchmark tool on Ubu
 cd /root
 
 # Get installation script
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/install.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/install.sh
 
 # Grant executable permission
 chmod +x install.sh
@@ -59,7 +59,7 @@ export GRPC_TOKEN_1=""  # Authentication token for endpoint1
 
 # Endpoint 2 configuration
 export GRPC_URL_2="http://64.130.32.158:10900"  # Change to your endpoint2
-export GRPC_NAME_2="Custom_Node"  # Name of endpoint2
+export GRPC_NAME_2="Self_Node"  # Name of endpoint2
 export GRPC_TOKEN_2=""  # Authentication token for endpoint2
 
 # Test configuration
@@ -84,7 +84,7 @@ vim run-grpc-vs-fzstream.sh
 **Configuration to modify:**
 ```bash
 # FzStream configuration
-export FZSTREAM_SERVER_ADDRESS="64.130.37.195:2222"  # FzStream server address
+export FZSTREAM_SERVER_ADDRESS="127.0.0.1:2222"  # FzStream server address
 export AUTH_TOKEN="demo_token"  # FzStream authentication token
 
 # gRPC configuration

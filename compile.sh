@@ -1,53 +1,60 @@
-#!/bin/bash
+#! /bin/bash
 
-# 编译脚本
-# 只负责编译 Rust 项目，生成二进制文件
+set -euo pipefail
 
-set -e
+# 方式 1：统一把 target 放到当前包（如果没有设置则使用默认）
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}"
 
-echo "开始编译 gRPC 基准测试工具..."
+# ==== 配置区 ====
+TARGET=${TARGET:-x86_64-unknown-linux-gnu}
+PKG=${PKG:-}  # 如果在 workspace 根，可写实际包名，例如 PKG=my-crate
+BINS=("grpc-vs-fzstream" "latency-test" "benchmark-jito" "grpc-comparison")
+# ===============
 
-# 创建 lib 目录
+# 解析 target 输出目录（考虑 CARGO_TARGET_DIR）
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+BINARY_DIR="${TARGET_DIR}/${TARGET}/release"
+
+echo "使用目标: $TARGET"
+echo "产物目录: $BINARY_DIR"
 mkdir -p lib
 
-# 检查是否支持交叉编译
-echo "检查交叉编译环境..."
+# 构建所有 bin（逐个指定，确保 cargo 真正去编它们）
+for BIN in "${BINS[@]}"; do
+  echo "==> 构建 $BIN ..."
+  if [[ -n "$PKG" ]]; then
+    cargo build --release --target "$TARGET" --package "$PKG" --bin "$BIN"
+  else
+    cargo build --release --target "$TARGET" --bin "$BIN"
+  fi
 
-# 编译项目，生成 Ubuntu 可运行的二进制文件
-echo "编译二进制文件（Ubuntu x86_64）..."
-if cargo build --target x86_64-unknown-linux-gnu --release; then
-    echo "✓ 交叉编译成功！"
-    BINARY_DIR="target/x86_64-unknown-linux-gnu/release"
-    echo "✓ 生成了 Ubuntu 可运行的二进制文件"
-else
-    echo "✗ 交叉编译失败！"
-    echo ""
-    echo "可能的解决方案："
-    echo "1. 安装交叉编译目标：rustup target add x86_64-unknown-linux-gnu"
-    echo "2. 安装 OpenSSL 开发包和交叉编译工具链"
-    echo "3. 配置交叉编译环境变量"
-    echo ""
-    echo "Ubuntu 交叉编译环境配置："
-    echo "- 安装必要的包：apt-get install gcc-x86-64-linux-gnu"
-    echo "- 设置环境变量：export CC_x86_64_unknown_linux_gnu=x86_64-linux-gnu-gcc"
-    echo ""
+  # 优先找正式产物，其次兜底到 deps 目录（某些情况下会带 hash 名）
+  SRC_PATH="$BINARY_DIR/$BIN"
+  if [[ ! -f "$SRC_PATH" ]]; then
+    # 兜底：deps 下可能叫 $BIN-<hash>，取最新的可执行文件
+    CANDIDATE=$(ls -t "$BINARY_DIR"/deps/"$BIN"-* 2>/dev/null | head -n1 || true)
+    if [[ -n "$CANDIDATE" && -x "$CANDIDATE" ]]; then
+      SRC_PATH="$CANDIDATE"
+    fi
+  fi
+
+  if [[ -f "$SRC_PATH" ]]; then
+    cp "$SRC_PATH" "lib/$BIN"
+    chmod +x "lib/$BIN"
+    echo "✓ 已复制: lib/$BIN"
+  else
+    echo "✗ 未找到二进制: 期望位置 $BINARY_DIR/$BIN"
+    echo "  帮你列一下目录，方便排查："
+    echo "  ls -l $BINARY_DIR"
+    ls -l "$BINARY_DIR" || true
+    echo "  ls -l $BINARY_DIR/deps"
+    ls -l "$BINARY_DIR/deps" || true
     exit 1
-fi
+  fi
+done
 
-# 复制二进制文件到 lib 目录
-echo "复制二进制文件到 lib 目录..."
-cp "$BINARY_DIR/grpc-comparison" lib/
-cp "$BINARY_DIR/benchmark-jito" lib/
-cp "$BINARY_DIR/latency-test" lib/
-cp "$BINARY_DIR/grpc-vs-fzstream" lib/
-
-# 设置二进制文件执行权限
-chmod +x lib/grpc-comparison
-chmod +x lib/benchmark-jito
-chmod +x lib/latency-test
-chmod +x lib/grpc-vs-fzstream
-
-echo "生成 shell 脚本..."
+echo ""
+echo "生成执行脚本..."
 
 # 生成 grpc-comparison.sh
 cat > lib/run-grpc-comparison.sh << 'EOF'
@@ -140,10 +147,9 @@ echo "=========================================="
 echo ""
 echo "生成的文件："
 echo "二进制文件："
-echo "- lib/grpc-comparison"
-echo "- lib/benchmark-jito"
-echo "- lib/latency-test"
-echo "- lib/grpc-vs-fzstream"
+for BIN in "${BINS[@]}"; do
+  echo "- lib/$BIN"
+done
 echo ""
 echo "Shell 脚本："
 echo "- lib/run-grpc-comparison.sh"

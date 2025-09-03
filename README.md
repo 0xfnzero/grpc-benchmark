@@ -15,7 +15,7 @@
 cd /root
 
 # 获取安装脚本
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/install.sh
+wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/install.sh
 
 # 授权可执行权限
 chmod +x install.sh
@@ -61,7 +61,7 @@ export GRPC_TOKEN_1=""  # 端点1的认证令牌
 
 # 端点 2 配置
 export GRPC_URL_2="http://64.130.32.158:10900"  # 修改为您的端点2
-export GRPC_NAME_2="Custom_Node"  # 端点2的名称
+export GRPC_NAME_2="Self_Node"  # 端点2的名称
 export GRPC_TOKEN_2=""  # 端点2的认证令牌
 
 # 测试配置
@@ -86,7 +86,7 @@ vim run-grpc-vs-fzstream.sh
 **需要修改的配置：**
 ```bash
 # FzStream 配置
-export FZSTREAM_SERVER_ADDRESS="64.130.37.195:2222"  # FzStream 服务器地址
+export FZSTREAM_SERVER_ADDRESS="127.0.0.1:2222"  # FzStream 服务器地址
 export AUTH_TOKEN="demo_token"  # FzStream 认证令牌
 
 # gRPC 配置

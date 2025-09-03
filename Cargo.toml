@@ -63,12 +63,12 @@ thiserror = "1.0"
 
 openssl = { version = "0.10.73", features = ["vendored"] }
 
-fzstream-client  = { git = "https://github.com/0xfnzero/fzstream-client" }
-fzstream-common  = { git = "https://github.com/0xfnzero/fzstream-common" }
+# fzstream-client  = { git = "https://github.com/0xfnzero/fzstream-client" }
+# fzstream-common  = { git = "https://github.com/0xfnzero/fzstream-common" }
 
 # Workspace dependencies
-# fzstream-client = { workspace = true, features = ["compression"] }
-# fzstream-common = { workspace = true }
+fzstream-client = { workspace = true, features = ["compression"] }
+fzstream-common = { workspace = true }
 
 
 

@@ -13,17 +13,17 @@ cd /root/grpc-benchmark
 
 # 下载二进制文件
 echo "下载二进制文件..."
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/grpc-comparison
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/benchmark-jito
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/latency-test
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/grpc-vs-fzstream
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/grpc-comparison
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/benchmark-jito
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/latency-test
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/grpc-vs-fzstream
 
 # 下载运行脚本
 echo "下载运行脚本..."
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/run-grpc-comparison.sh
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/run-benchmark-jito.sh
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/run-latency-test.sh
-wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.2/run-grpc-vs-fzstream.sh
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/run-grpc-comparison.sh
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/run-benchmark-jito.sh
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/run-latency-test.sh
+wget -q --show-progress https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/run-grpc-vs-fzstream.sh
 
 # 设置执行权限
 echo "设置执行权限..."
