@@ -1,242 +1,276 @@
-# gRPC 基准测试工具 - 快速使用指南
-[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_EN.md) | [Telegram](https://t.me/fnzero_group)
+# gRPC Benchmark Tool - Quick Start Guide
+[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group)
 
-> grpc-benchmark是基于 [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts) 构建的 Rust 版本，提供更高效的性能和更好的部署体验。✅
+> grpc-benchmark is a Rust version built on [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts)
+, offering higher performance and a better deployment experience. ✅
 
-## 概述
+## Overview
 
-本指南将帮助您在 Ubuntu 服务器上快速下载和运行 gRPC 基准测试工具，无需编译，直接使用预编译的二进制文件。
+This guide will help you quickly download and run the gRPC benchmark tool on Ubuntu servers without compilation, using pre-compiled binary files directly.
 
-## 安装测速工具
+## Install Speed Test Tool
 
-### 1. 下载安装脚本
+### 1. Download Installation Script
 
 ```bash
 cd /root
 
-# 获取安装脚本
+# Get installation script
 wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/install.sh
 
-# 授权可执行权限
+# Grant executable permission
 chmod +x install.sh
 
-# 执行安装脚本
+# Execute installation script
 sudo ./install.sh
-
-# 进入grpc-benchmark
-cd grpc-benchmark
 ```
 
-### 2. 验证下载
+### 2. Verify Download
 
 ```bash
-# 检查文件是否存在
+# Check if files exist
 ls -la
 
-# 应该看到以下文件：
-# - grpc-comparison (二进制文件)
-# - benchmark-jito (二进制文件)
-# - latency-test (二进制文件)
-# - grpc-vs-fzstream (二进制文件)
-# - run-grpc-comparison.sh (脚本)
-# - run-benchmark-jito.sh (脚本)
-# - run-latency-test.sh (脚本)
-# - run-grpc-vs-fzstream.sh (脚本)
+# You should see the following files:
+# - grpc-comparison (binary file)
+# - benchmark-jito (binary file)
+# - latency-test (binary file)
+# - grpc-vs-fzstream (binary file)
+# - run-grpc-comparison.sh (script)
+# - run-benchmark-jito.sh (script)
+# - run-latency-test.sh (script)
+# - run-grpc-vs-fzstream.sh (script)
 ```
 
-##  gRPC 比较测试
+## gRPC Comparison Test
 
-**编辑 `run-grpc-comparison.sh` 文件：**
+**Edit the `run-grpc-comparison.sh` file:**
 
 ```bash
 vim run-grpc-comparison.sh
 ```
 
-**需要修改的配置：**
+**Configuration to modify:**
 ```bash
-# 端点 1 配置
-export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点1
-export GRPC_NAME_1="Public_Node"    # 端点1的名称
-export GRPC_TOKEN_1=""              # 端点1的认证令牌
+# Endpoint 1 configuration
+export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint1
+export GRPC_NAME_1="Public_Node"    # Name of endpoint1
+export GRPC_TOKEN_1=""              # Authentication token for endpoint1
 
-# 端点 2 配置
-export GRPC_URL_2="http://64.130.32.158:10900"  # 修改为您的端点2
-export GRPC_NAME_2="Self_Node"  # 端点2的名称
-export GRPC_TOKEN_2=""          # 端点2的认证令牌
+# Endpoint 2 configuration
+export GRPC_URL_2="http://64.130.32.158:10900"  # Change to your endpoint2
+export GRPC_NAME_2="Self_Node"  # Name of endpoint2
+export GRPC_TOKEN_2=""          # Authentication token for endpoint2
 
-# 测试配置
-export GRPC_COMPARISON_DURATION_SEC=30  # 测试持续时间（秒）
-export CONCURRENCY=10                   # 并发级别
+# Test configuration
+export GRPC_COMPARISON_DURATION_SEC=30  # Test duration (seconds)
+export CONCURRENCY=10                   # Concurrency level
 ```
 
-**运行 gRPC 端点比较测试** 
+**Run gRPC Endpoint Comparison Test**
 ```bash
-# 运行 gRPC 端点比较测试
+# Run gRPC endpoint comparison test
 ./run-grpc-comparison.sh
 ```
 
-### 2. gRPC vs FzStream 对比测试
+### 2. gRPC vs FzStream Comparison Test
 
-**编辑 `run-grpc-vs-fzstream.sh` 文件：**
+**Edit the `run-grpc-vs-fzstream.sh` file:**
 
 ```bash
 vim run-grpc-vs-fzstream.sh
 ```
 
-**需要修改的配置：**
+**Configuration to modify:**
 ```bash
-# FzStream 配置
-export FZSTREAM_SERVER_ADDRESS="127.0.0.1:2222"  # FzStream 服务器地址
-export AUTH_TOKEN="demo_token"  # FzStream 认证令牌
+# FzStream configuration
+export FZSTREAM_SERVER_ADDRESS="127.0.0.1:2222"  # FzStream server address
+export AUTH_TOKEN="demo_token"  # FzStream authentication token
 
-# gRPC 配置
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC 端点
-export GRPC_TOKEN=""  # gRPC 认证令牌（可选）
+# gRPC configuration
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC endpoint
+export GRPC_TOKEN=""  # gRPC authentication token (optional)
 
-# 测试配置
-export TEST_DURATION=30  # 测试持续时间（秒）
+# Test configuration
+export TEST_DURATION=30  # Test duration (seconds)
 ```
 
-**运行 gRPC vs FzStream 对比测试**
+**Run gRPC vs FzStream Comparison Test**
 ```bash
-# 运行 gRPC vs FzStream 对比测试
+# Run gRPC vs FzStream comparison test
 ./run-grpc-vs-fzstream.sh
 ```
 
-### 3. 延迟测试
+### 3. Latency Test
 
-**编辑 `run-latency-test.sh` 文件：**
+**Edit the `run-latency-test.sh` file:**
 
 ```bash
 vim run-latency-test.sh
 ```
 
-**需要修改的配置：**
+**Configuration to modify:**
 ```bash
-# 默认 gRPC 端点配置
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点
-export GRPC_TOKEN=""                                                  # 如果需要认证，填入您的令牌
+# Default gRPC endpoint configuration
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint
+export GRPC_TOKEN=""  # If authentication is required, enter your token
 
-# 测试参数
-export TOTAL_ROUNDS=10        # 测试轮数
-export PING_INTERVAL_MS=1000  # ping 间隔（毫秒）
-export TEST_TIMEOUT=120       # 超时时间（秒）
+# Test parameters
+export TOTAL_ROUNDS=10        # Number of test rounds
+export PING_INTERVAL_MS=1000  # Ping interval (milliseconds)
+export TEST_TIMEOUT=120       # Timeout (seconds)
 ```
 
-**运行延迟测试**
+**Run Latency Test**
 ```bash
-# 运行延迟测试
+# Run latency test
 ./run-latency-test.sh
 ```
 
-### 4. Jito 基准测试配置
+### 4. Jito Benchmark Test Configuration
 
-**编辑 `run-benchmark-jito.sh` 文件：**
+**Edit the `run-benchmark-jito.sh` file:**
 
 ```bash
 vim run-benchmark-jito.sh
 ```
 
-**需要修改的配置：**
+**Configuration to modify:**
 ```bash
-# Jito 配置
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # 修改为您的 Jito 端点
-export JITO_CONCURRENCY=10  # 并发级别
+# Jito configuration
+export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # Change to your Jito endpoint
+export JITO_CONCURRENCY=10  # Concurrency level
 ```
 
-**运行 Jito 基准测试**
+**Run Jito Benchmark Test**
 ```bash
-# 运行 Jito 基准测试
+# Run Jito benchmark test
 ./run-benchmark-jito.sh
 ```
 
+## Common Configuration Examples
 
-## 常见配置示例
-
-### 1. 调整测试参数
+### 1. Adjusting Test Parameters
 
 ```bash
-# 修改 run-grpc-comparison.sh
-export GRPC_COMPARISON_DURATION_SEC=60  # 测试1分钟
-export CONCURRENCY=20                   # 增加并发
+# Modify run-grpc-comparison.sh
+export GRPC_COMPARISON_DURATION_SEC=60  # Test for 1 minute
+export CONCURRENCY=20                   # Increase concurrency
 ```
 
-### 2. 配置 FzStream vs gRPC 对比
+### 2. Configure FzStream vs gRPC Comparison
 
 ```bash
-# 修改 run-grpc-vs-fzstream.sh
+# Modify run-grpc-vs-fzstream.sh
 export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
 export AUTH_TOKEN="your-fzstream-token"
 export GRPC_URL="https://your-grpc-endpoint.com:443"
-export TEST_DURATION=60  # 测试60秒
+export TEST_DURATION=60  # Test for 60 seconds
 ```
 
-### 3. 添加更多端点
+### 3. Adding More Endpoints
 
 ```bash
-# 在 run-grpc-comparison.sh 中添加端点3
+# Add endpoint3 in run-grpc-comparison.sh
 export GRPC_URL_3="https://endpoint3.com:443"
 export GRPC_NAME_3="Endpoint_3"
 export GRPC_TOKEN_3=""
 ```
 
-### 4. 使用自定义端点
+### 4. Using Custom Endpoints
 
 ```bash
-# 修改 run-latency-test.sh
+# Modify run-latency-test.sh
 export GRPC_URL="https://your-custom-endpoint.com:443"
 export GRPC_TOKEN="your-auth-token"
 ```
 
-## 输出说明
+## Common Configuration Examples
 
-### 延迟测试输出
-- 平均延迟时间
-- 最小/最大延迟
-- 延迟分布统计
-- 成功率
+### 1. Adjusting Test Parameters
 
-### gRPC 比较测试输出
-- 各端点的性能对比
-- 吞吐量统计
-- 错误率统计
-- 延迟对比
+```bash
+# Modify run-grpc-comparison.sh
+export GRPC_COMPARISON_DURATION_SEC=60  # Test for 1 minute
+export CONCURRENCY=20                   # Increase concurrency
+```
 
-### Jito 基准测试输出
-- 区块引擎性能
-- 交易处理速度
-- 错误统计
+### 2. Configure FzStream vs gRPC Comparison
 
-### gRPC vs FzStream 对比测试输出
-- 实时slot接收对比
-- 延迟统计 (FzStream vs gRPC)
-- 首次接收统计
-- 性能分析报告
-- 平均延迟对比
+```bash
+# Modify run-grpc-vs-fzstream.sh
+export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
+export AUTH_TOKEN="your-fzstream-token"
+export GRPC_URL="https://your-grpc-endpoint.com:443"
+export TEST_DURATION=60  # Test for 60 seconds
+```
 
-**输出示例：**
+### 3. Adding More Endpoints
+
+```bash
+# Add endpoint3 in run-grpc-comparison.sh
+export GRPC_URL_3="https://endpoint3.com:443"
+export GRPC_NAME_3="Endpoint_3"
+export GRPC_TOKEN_3=""
+```
+
+### 4. Using Custom Endpoints
+
+```bash
+# Modify run-latency-test.sh
+export GRPC_URL="https://your-custom-endpoint.com:443"
+export GRPC_TOKEN="your-auth-token"
+```
+
+## Output Description
+
+### Latency Test Output
+- Average latency time
+- Minimum/maximum latency
+- Latency distribution statistics
+- Success rate
+
+### gRPC Comparison Test Output
+- Performance comparison of endpoints
+- Throughput statistics
+- Error rate statistics
+- Latency comparison
+
+### Jito Benchmark Test Output
+- Block engine performance
+- Transaction processing speed
+- Error statistics
+
+### gRPC vs FzStream Comparison Test Output
+- Real-time slot reception comparison
+- Latency statistics (FzStream vs gRPC)
+- First reception statistics
+- Performance analysis report
+- Average latency comparison
+
+**Output Example:**
 ```
 [00:18:20.759] gRPC     接收 slot 362449176 : 首次接收
 [00:18:20.759] FzStream 接收 slot 362449176 : 延迟   0.63ms (相对于 gRPC)
 [00:18:21.763] gRPC     接收 slot 362449177 : 首次接收
 [00:18:21.763] FzStream 接收 slot 362449177 : 延迟   1.91ms (相对于 gRPC)
 
-📊 gRPC 性能分析
-总接收区块数: 1250 blocks
-首先接收区块数: 758 (60.64%) blocks
-落后接收区块数: 492 (39.36%) blocks
+📊 gRPC Performance Analysis
+Total received blocks: 1250 blocks
+First received blocks: 758 (60.64%) blocks
+Delayed received blocks: 492 (39.36%) blocks
 
-📊 FzStream 性能分析
-总接收区块数: 1250 blocks
-首先接收区块数: 492 (39.36%) blocks
-落后接收区块数: 758 (60.64%) blocks
-平均延迟: 1.25ms
+📊 FzStream Performance Analysis
+Total received blocks: 1250 blocks
+First received blocks: 492 (39.36%) blocks
+Delayed received blocks: 758 (60.64%) blocks
+Average latency: 1.25ms
 ```
 
-## 注意事项
+## Important Notes
 
-1. **网络要求**：确保服务器能访问 gRPC 端点
-2. **认证令牌**：某些端点可能需要 API 令牌
-3. **测试时间**：长时间测试可能产生大量数据
-4. **资源消耗**：高并发测试可能消耗较多 CPU 和内存
-5. **端点限制**：注意端点的速率限制
+1. **Network Requirements**: Ensure the server can access gRPC endpoints
+2. **Authentication Tokens**: Some endpoints may require API tokens
+3. **Test Duration**: Long-term tests may generate large amounts of data
+4. **Resource Consumption**: High concurrency tests may consume more CPU and memory
+5. **Endpoint Limits**: Pay attention to endpoint rate limits
