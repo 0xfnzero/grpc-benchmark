@@ -56,13 +56,13 @@ vim run-grpc-comparison.sh
 ```bash
 # 端点 1 配置
 export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点1
-export GRPC_NAME_1="Public_Node"  # 端点1的名称
-export GRPC_TOKEN_1=""  # 端点1的认证令牌
+export GRPC_NAME_1="Public_Node"    # 端点1的名称
+export GRPC_TOKEN_1=""              # 端点1的认证令牌
 
 # 端点 2 配置
 export GRPC_URL_2="http://64.130.32.158:10900"  # 修改为您的端点2
 export GRPC_NAME_2="Self_Node"  # 端点2的名称
-export GRPC_TOKEN_2=""  # 端点2的认证令牌
+export GRPC_TOKEN_2=""          # 端点2的认证令牌
 
 # 测试配置
 export GRPC_COMPARISON_DURATION_SEC=30  # 测试持续时间（秒）
@@ -115,7 +115,7 @@ vim run-latency-test.sh
 ```bash
 # 默认 gRPC 端点配置
 export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点
-export GRPC_TOKEN=""  # 如果需要认证，填入您的令牌
+export GRPC_TOKEN=""                                                  # 如果需要认证，填入您的令牌
 
 # 测试参数
 export TOTAL_ROUNDS=10        # 测试轮数

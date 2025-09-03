@@ -54,13 +54,13 @@ vim run-grpc-comparison.sh
 ```bash
 # Endpoint 1 configuration
 export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint1
-export GRPC_NAME_1="Public_Node"  # Name of endpoint1
-export GRPC_TOKEN_1=""  # Authentication token for endpoint1
+export GRPC_NAME_1="Public_Node"    # Name of endpoint1
+export GRPC_TOKEN_1=""              # Authentication token for endpoint1
 
 # Endpoint 2 configuration
 export GRPC_URL_2="http://64.130.32.158:10900"  # Change to your endpoint2
 export GRPC_NAME_2="Self_Node"  # Name of endpoint2
-export GRPC_TOKEN_2=""  # Authentication token for endpoint2
+export GRPC_TOKEN_2=""          # Authentication token for endpoint2
 
 # Test configuration
 export GRPC_COMPARISON_DURATION_SEC=30  # Test duration (seconds)
