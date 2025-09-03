@@ -67,12 +67,15 @@ openssl = { version = "0.10.73", features = ["vendored"] }
 # fzstream-common  = { git = "https://github.com/0xfnzero/fzstream-common" }
 
 # Workspace dependencies
-fzstream-client = { workspace = true, features = ["compression"] }
-fzstream-common = { workspace = true }
+# fzstream-client = { workspace = true, features = ["compression"] }
+# fzstream-common = { workspace = true }
+
+fzstream-client = { version = "1.0.0", features = ["compression"] }
+fzstream-common = { version = "1.0.0" }
 
 
 
 rustls = { version = "0.23", features = ["ring"] }
-solana-streamer-sdk = "0.4.0"
+solana-streamer-sdk = "0.4.1"
 
 
