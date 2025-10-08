@@ -1,5 +1,5 @@
 # gRPC 基准测试工具 - 快速使用指南
-[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/ckf5UHxz)
+[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
 
 > grpc-benchmark是基于 [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts) 构建的 Rust 版本，提供更高效的性能和更好的部署体验。✅
 
