@@ -8,6 +8,17 @@
 
 This guide will help you quickly download and run the gRPC benchmark tool on Ubuntu servers without compilation, using pre-compiled binary files directly.
 
+## What This Tool Measures
+
+grpc-benchmark provides prebuilt Rust binaries for comparing Solana Yellowstone gRPC endpoints, FzStream servers, and Jito Block Engine endpoints.
+
+| Binary | Script | Measures |
+|--------|--------|----------|
+| `grpc-comparison` | `run-grpc-comparison.sh` | Throughput, latency, and error rate across multiple Yellowstone gRPC endpoints |
+| `grpc-vs-fzstream` | `run-grpc-vs-fzstream.sh` | Slot reception order and latency between gRPC and FzStream |
+| `latency-test` | `run-latency-test.sh` | Repeated endpoint latency, min/max/average, and success rate |
+| `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine request performance under configurable concurrency |
+
 ## Install Speed Test Tool
 
 ### 1. Download Installation Script
@@ -146,43 +157,6 @@ export JITO_CONCURRENCY=10  # Concurrency level
 ```bash
 # Run Jito benchmark test
 ./run-benchmark-jito.sh
-```
-
-## Common Configuration Examples
-
-### 1. Adjusting Test Parameters
-
-```bash
-# Modify run-grpc-comparison.sh
-export GRPC_COMPARISON_DURATION_SEC=60  # Test for 1 minute
-export CONCURRENCY=20                   # Increase concurrency
-```
-
-### 2. Configure FzStream vs gRPC Comparison
-
-```bash
-# Modify run-grpc-vs-fzstream.sh
-export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
-export AUTH_TOKEN="your-fzstream-token"
-export GRPC_URL="https://your-grpc-endpoint.com:443"
-export TEST_DURATION=60  # Test for 60 seconds
-```
-
-### 3. Adding More Endpoints
-
-```bash
-# Add endpoint3 in run-grpc-comparison.sh
-export GRPC_URL_3="https://endpoint3.com:443"
-export GRPC_NAME_3="Endpoint_3"
-export GRPC_TOKEN_3=""
-```
-
-### 4. Using Custom Endpoints
-
-```bash
-# Modify run-latency-test.sh
-export GRPC_URL="https://your-custom-endpoint.com:443"
-export GRPC_TOKEN="your-auth-token"
 ```
 
 ## Common Configuration Examples

@@ -7,6 +7,17 @@
 
 本指南将帮助您在 Ubuntu 服务器上快速下载和运行 gRPC 基准测试工具，无需编译，直接使用预编译的二进制文件。
 
+## 这个工具测试什么
+
+grpc-benchmark 提供预编译 Rust 二进制文件，用于对比 Solana Yellowstone gRPC 端点、FzStream 服务和 Jito Block Engine 端点的性能。
+
+| 二进制 | 脚本 | 测试内容 |
+|--------|------|----------|
+| `grpc-comparison` | `run-grpc-comparison.sh` | 多个 Yellowstone gRPC 端点的吞吐、延迟和错误率 |
+| `grpc-vs-fzstream` | `run-grpc-vs-fzstream.sh` | gRPC 与 FzStream 的 slot 首次接收顺序和延迟 |
+| `latency-test` | `run-latency-test.sh` | 端点重复延迟、最小/最大/平均值和成功率 |
+| `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine 在可配置并发下的请求性能 |
+
 ## 安装测速工具
 
 ### 1. 下载安装脚本
