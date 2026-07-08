@@ -1,216 +1,113 @@
-# gRPC Benchmark Tool (Rust Version)
+# gRPC / Shred Benchmark Tool
 
-A high-performance gRPC benchmark tool implemented in Rust for testing Solana Yellowstone gRPC endpoints and Jito Block Engine APIs.
+This guide mirrors the root README and keeps comparison benchmarks first.
 
-📖 [中文版本](README-rust.md)
+## Platform Binaries
 
-## Features
+Release packages support macOS and Linux:
 
-- **gRPC Comparison**: Compare multiple Solana Yellowstone gRPC endpoints for performance and reliability
-- **Latency Testing**: Measure ping latencies with configurable concurrency levels
-- **Jito Benchmark**: HTTP API benchmarking for Jito Block Engine endpoints
-- **Real-time Statistics**: Comprehensive performance metrics including percentiles and standard deviations
-- **Concurrent Testing**: Support for high-concurrency testing scenarios
+- `x86_64-apple-darwin`
+- `aarch64-apple-darwin`
+- `x86_64-unknown-linux-gnu`
+- `aarch64-unknown-linux-gnu`
 
-## Installation
-
-### Prerequisites
-
-- Rust 1.70+ (install via [rustup](https://rustup.rs/))
-
-### Build from Source
+Install:
 
 ```bash
-git clone <repository-url>
-cd grpc-benchmark
-cargo build --release
+curl -fsSL -o install.sh https://github.com/0xfnzero/grpc-benchmark/releases/latest/download/install.sh
+chmod +x install.sh
+./install.sh
+cd "$HOME/grpc-benchmark"
 ```
 
-## Usage
-
-### 1. gRPC Endpoint Comparison
-
-Compare multiple gRPC endpoints to determine which provides the best performance:
+Use a specific tag:
 
 ```bash
-# Using environment variables
+VERSION=v1.4 ./install.sh
+```
+
+If the install directory already exists and was not created by this installer, use a new `INSTALL_DIR` or set `FORCE_INSTALL=1` to back it up and replace it.
+
+## Comparison Benchmarks
+
+### 1. gRPC vs gRPC
+
+```bash
 export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"
 export GRPC_NAME_1="Public_Node"
-export GRPC_TOKEN_1="your-token-1"
+export GRPC_TOKEN_1=""
 
-export GRPC_URL_2="https://endpoint2.example.com:443"
+export GRPC_URL_2="https://your-grpc-endpoint.com:443"
 export GRPC_NAME_2="Custom_Node"
-export GRPC_TOKEN_2="your-token-2"
+export GRPC_TOKEN_2=""
 
-cargo run --bin grpc-comparison
-```
-
-### 2. Latency Testing
-
-Test ping latencies to a single gRPC endpoint:
-
-```bash
-# Using environment variables
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
-export TOTAL_ROUNDS=100
-
-cargo run --bin latency-test
-```
-
-### 3. Jito Block Engine Benchmark
-
-Benchmark Jito Block Engine HTTP API performance:
-
-```bash
-# Using environment variables
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
-export JITO_CONCURRENCY=10
-
-cargo run --bin benchmark-jito
-```
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file based on `.env.example`:
-
-```bash
-cp .env.example .env
-```
-
-Key configuration options:
-
-- `GRPC_URL`: Default gRPC endpoint URL
-- `GRPC_TOKEN`: gRPC endpoint authentication token
-- `GRPC_URL_*`, `GRPC_NAME_*`, `GRPC_TOKEN_*`: Multi-endpoint configuration
-- `TOTAL_ROUNDS`: Number of ping requests (default: 50)
-- `CONCURRENCY`: Concurrent request limit (default: 10)
-- `GRPC_COMPARISON_DURATION_SEC`: Comparison test duration (default: 30 seconds)
-- `JITO_URL`: Jito Block Engine endpoint
-- `JITO_CONCURRENCY`: Jito API concurrency level
-
-### Quick Start Examples
-
-```bash
-# 1. Configure environment variables
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
-export JITO_CONCURRENCY=10
-
-# 2. Run Jito benchmark
-cargo run --bin benchmark-jito
-
-# 3. Configure gRPC comparison test
-export GRPC_URL_1="http://64.130.37.195:10900"
-export GRPC_NAME_1="Custom_Node"
-export GRPC_URL_2="https://solana-yellowstone-grpc.publicnode.com:443"
-export GRPC_NAME_2="Public_Node"
 export GRPC_COMPARISON_DURATION_SEC=30
-
-# 4. Run gRPC comparison test
-cargo run --bin grpc-comparison-real
+./run-grpc-comparison.sh
 ```
 
-## Output Examples
-
-### gRPC Comparison Results
-
-```
-===== Endpoint Performance Comparison =====
-Custom_Node     : First received  65.23%, Average lag when behind   8.45ms, Overall average latency   3.67ms
-Public_Node     : First received  34.77%, Average lag when behind  15.91ms, Overall average latency   7.23ms
-```
-
-### Latency Test Results
-
-```
-Latency Statistics:
-  Average latency: 45.67ms
-  Minimum latency: 23.12ms
-  Maximum latency: 89.34ms
-  Standard deviation: 12.45ms
-  Median (p50): 43.21ms
-  Percentile (p90): 65.78ms
-  Percentile (p99): 82.45ms
-  Sample count: 100
-```
-
-### Jito Benchmark Results
-
-```
-Jito URL: https://amsterdam.mainnet.block-engine.jito.wtf
-Request concurrency: 10/s
-Statistics output every 10 seconds, please wait...
-Statistics - Past 10 seconds: Total requests:  100, Successful responses:   85, Average per second:  8.5, 429 errors:  15
-Statistics - Past 10 seconds: Total requests:  100, Successful responses:   92, Average per second:  9.2, 429 errors:   8
-```
-
-## Performance Features
-
-- **Zero-copy Operations**: Efficient memory usage with minimal allocations
-- **Async/Await**: Non-blocking I/O for maximum concurrency
-- **Connection Pooling**: Reuse connections for better performance
-- **Real-time Metrics**: Live statistics during long-running tests
-- **Error Handling**: Robust error recovery and reporting
-
-## Architecture
-
-```
-grpc-benchmark-rust/
-├── src/
-│   ├── lib.rs              # Core library and protobuf definitions
-│   ├── config.rs           # Configuration management
-│   ├── stats.rs            # Statistics calculation
-│   ├── grpc_client.rs      # gRPC client wrapper
-│   ├── error.rs            # Error type definitions
-│   └── bin/
-│       ├── grpc_comparison.rs        # Multi-endpoint comparison tool
-│       ├── grpc_comparison_real.rs   # Real-world comparison tool
-│       ├── latency_test.rs           # Latency testing tool
-│       └── benchmark_jito.rs         # Jito API benchmark tool
-├── Cargo.toml              # Rust dependencies
-└── .env.example            # Environment variable configuration example
-```
-
-## Development
-
-### Running Tests
+### 2. Shred vs Shred
 
 ```bash
-cargo test
+export SHRED_BIND_1="0.0.0.0:20000"
+export SHRED_NAME_1="Shred_A"
+export SHRED_DECODE_MODE_1="ledger"
+
+export SHRED_BIND_2="0.0.0.0:20001"
+export SHRED_NAME_2="Shred_B"
+export SHRED_DECODE_MODE_2="ledger"
+
+export SHRED_COMPARISON_DURATION_SEC=30
+./run-shred-comparison.sh
 ```
 
-### Building for Production
+### 3. gRPC vs Shred
 
 ```bash
-cargo build --release
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_TOKEN=""
+export GRPC_NAME="gRPC"
+
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_NAME="Shred"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=false
+
+export TEST_DURATION=30
+./run-grpc-vs-shred.sh
 ```
 
-### Adding New Benchmarks
+## Single-Source Benchmarks
 
-1. Create a new binary in `src/bin/`
-2. Use the shared modules from `src/lib.rs`
-3. Add configuration options to `src/config.rs`
-4. Update `Cargo.toml` to include the new binary
+```bash
+./run-latency-test.sh
+./run-shred.sh
+./run-shred-benchmark.sh
+./run-benchmark-jito.sh
+```
 
-## Comparison with TypeScript Version
+Raw shred decoding does not depend on Jito ShredStream services. `ledger` mode parses Solana wire headers directly and can use Merkle Reed-Solomon FEC. Use `SHRED_DECODE_MODE=compat` only for ShredStream SDK fixed-offset payloads.
 
-This Rust implementation provides:
+## Release And Tag
 
-- **3-5x better performance** due to native compilation
-- **Lower memory usage** with zero-copy operations
-- **Better concurrency** handling with tokio async runtime
-- **Type safety** with Rust's ownership model
-- **Smaller binary size** for distribution
+Preferred flow: push a `v*` tag and let GitHub Actions build/upload all macOS/Linux packages:
 
-## Contributing
+```bash
+git tag v1.4
+git push origin v1.4
+```
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Run `cargo fmt` and `cargo clippy`
-5. Submit a pull request
+Manual fallback:
 
-## License
+```bash
+VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 
-[Same as original project]
+git tag v1.4
+git push origin v1.4
+
+gh release create v1.4 \
+  release/install.sh \
+  release/grpc-benchmark-*.tar.gz \
+  release/SHA256SUMS \
+  --title "v1.4" \
+  --notes "gRPC/Shred comparison benchmarks and raw shred decoding updates"
+```

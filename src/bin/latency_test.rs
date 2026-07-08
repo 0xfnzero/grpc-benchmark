@@ -1,6 +1,6 @@
+use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
-use anyhow::Result;
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::prelude::{
     subscribe_update::UpdateOneof, SubscribeRequest, SubscribeRequestPing,
@@ -8,9 +8,9 @@ use yellowstone_grpc_proto::prelude::{
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use tokio::time::{sleep, timeout, interval};
-use tracing::{error, info, warn};
+use tokio::time::{interval, sleep, timeout};
 use tonic::transport::ClientTlsConfig;
+use tracing::{error, info, warn};
 
 #[derive(Parser)]
 #[command(name = "latency-test")]
@@ -21,7 +21,7 @@ struct Args {
     grpc_url: Option<String>,
 
     /// gRPC authentication token (X-Token)
-    #[arg(long, env = "GRPC_TOKEN")]
+    #[arg(long, env = "GRPC_TOKEN", hide_env_values = true)]
     grpc_token: Option<String>,
 
     /// Total number of ping requests to send
@@ -82,9 +82,12 @@ impl LatencyStats {
         self.max = self.latencies[self.latencies.len() - 1];
         self.mean = self.latencies.iter().sum::<f64>() / self.latencies.len() as f64;
 
-        let variance = self.latencies.iter()
+        let variance = self
+            .latencies
+            .iter()
             .map(|&x| (x - self.mean).powi(2))
-            .sum::<f64>() / self.latencies.len() as f64;
+            .sum::<f64>()
+            / self.latencies.len() as f64;
         self.std_dev = variance.sqrt();
 
         self.median = self.percentile(50.0);
@@ -173,7 +176,8 @@ async fn test_grpc_latency_serial(
                             if let Some(UpdateOneof::Pong(pong)) = update.update_oneof {
                                 if pong.id == ping_id {
                                     let pong_time = Instant::now();
-                                    let latency = pong_time.duration_since(send_time).as_secs_f64() * 1000.0;
+                                    let latency =
+                                        pong_time.duration_since(send_time).as_secs_f64() * 1000.0;
                                     return Ok(latency);
                                 } else {
                                     warn!("收到错误ID的pong: 期望 {}, 收到 {}", ping_id, pong.id);
@@ -187,7 +191,8 @@ async fn test_grpc_latency_serial(
                     }
                 }
                 Err(anyhow::anyhow!("No pong received"))
-            }).await;
+            })
+            .await;
 
             match pong_result {
                 Ok(Ok(latency)) => {
@@ -211,7 +216,8 @@ async fn test_grpc_latency_serial(
         }
 
         Ok::<(), anyhow::Error>(())
-    }).await;
+    })
+    .await;
 
     match result {
         Ok(_) => info!("测试完成"),
@@ -385,7 +391,8 @@ async fn main() -> Result<()> {
         .with_env_filter(format!("latency_test={}", level))
         .init();
 
-    let grpc_url = args.grpc_url
+    let grpc_url = args
+        .grpc_url
         .unwrap_or_else(|| "https://solana-yellowstone-grpc.publicnode.com:443".to_string());
 
     info!("gRPC URL: {}", grpc_url);
@@ -398,7 +405,14 @@ async fn main() -> Result<()> {
     let test_timeout = Duration::from_secs(args.timeout);
 
     // Use serial approach for simplicity and reliability
-    test_grpc_latency_serial(&grpc_url, args.total_rounds, args.ping_interval_ms, args.grpc_token.as_deref(), test_timeout).await?;
+    test_grpc_latency_serial(
+        &grpc_url,
+        args.total_rounds,
+        args.ping_interval_ms,
+        args.grpc_token.as_deref(),
+        test_timeout,
+    )
+    .await?;
 
     Ok(())
 }

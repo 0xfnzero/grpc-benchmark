@@ -1,12 +1,35 @@
 use anyhow::Result;
+use clap::Parser;
 use reqwest::Client;
 use serde_json::json;
-use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::{interval, Instant};
 use tracing::{error, info};
+
+#[derive(Debug, Parser)]
+#[command(name = "benchmark-jito")]
+#[command(about = "Benchmark Jito Block Engine HTTP request throughput")]
+struct Args {
+    #[arg(
+        long,
+        env = "JITO_URL",
+        default_value = "https://amsterdam.mainnet.block-engine.jito.wtf"
+    )]
+    jito_url: String,
+
+    #[arg(
+        long,
+        env = "JITO_CONCURRENCY",
+        default_value_t = 10,
+        value_parser = clap::value_parser!(u64).range(1..=100_000)
+    )]
+    concurrency: u64,
+
+    #[arg(long, env = "JITO_DURATION_SEC", default_value_t = 0)]
+    duration_sec: u64,
+}
 
 #[derive(Clone)]
 struct Statistics {
@@ -47,22 +70,18 @@ impl Statistics {
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
-    
+    let args = Args::parse();
+
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter("info")
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()))
         .init();
 
-    // Read configuration from environment variables
-    let jito_url = env::var("JITO_URL")
-        .unwrap_or_else(|_| "https://amsterdam.mainnet.block-engine.jito.wtf".to_string());
-    let concurrency: u64 = env::var("JITO_CONCURRENCY")
-        .unwrap_or_else(|_| "10".to_string())
-        .parse()
-        .unwrap_or(10);
-
-    info!("Jito URL: {}", jito_url);
-    info!("请求并发量: {}/s", concurrency);
+    info!("Jito URL: {}", args.jito_url);
+    info!("请求并发量: {}/s", args.concurrency);
+    if args.duration_sec > 0 {
+        info!("运行时长: {}s", args.duration_sec);
+    }
     info!("每 10 秒输出统计信息, 请稍后...");
 
     // Create statistics
@@ -79,9 +98,9 @@ async fn main() -> Result<()> {
             let mut stats_interval = interval(Duration::from_secs(10));
             loop {
                 stats_interval.tick().await;
-                
+
                 let (total, success, error_429) = stats.reset();
-                
+
                 info!(
                     "统计 - 过去 10 秒：发送请求总量: {:>3}, 成功响应量: {:>3}, 平均每秒成功: {:>4.1}, 429 错误次数: {:>3}",
                     total,
@@ -96,47 +115,54 @@ async fn main() -> Result<()> {
     // Main request sending loop
     let request_task = {
         let client = client.clone();
-        let jito_url = jito_url.clone();
+        let jito_url = args.jito_url.clone();
+        let concurrency = args.concurrency;
         let stats = stats.clone();
-        
+
         tokio::spawn(async move {
-            let interval_per_request = Duration::from_millis(1000 / concurrency);
-            
+            let interval_per_request = Duration::from_micros((1_000_000 / concurrency).max(1));
+
             loop {
                 // Send requests with staggered timing
                 let mut handles = Vec::new();
-                
+
                 for i in 0..concurrency {
                     let client = client.clone();
                     let url = jito_url.clone();
                     let stats = stats.clone();
-                    
+
                     let handle = tokio::spawn(async move {
                         // Stagger requests evenly across the second
                         tokio::time::sleep(interval_per_request * i as u32).await;
                         send_request(client, &url, stats).await;
                     });
-                    
+
                     handles.push(handle);
                 }
-                
+
                 // Wait for all requests in this batch to complete
                 for handle in handles {
                     if let Err(e) = handle.await {
                         error!("Request task failed: {}", e);
                     }
                 }
-                
+
                 // Wait for the next second
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         })
     };
 
-    // Wait for both tasks (this will run indefinitely)
-    tokio::select! {
-        _ = stats_task => {},
-        _ = request_task => {},
+    if args.duration_sec > 0 {
+        tokio::time::sleep(Duration::from_secs(args.duration_sec)).await;
+        stats_task.abort();
+        request_task.abort();
+    } else {
+        // Wait for both tasks (this will run indefinitely)
+        tokio::select! {
+            _ = stats_task => {},
+            _ = request_task => {},
+        }
     }
 
     Ok(())
@@ -164,7 +190,7 @@ async fn send_request(client: Client, url: &str, stats: Statistics) {
     {
         Ok(response) => {
             let duration = start.elapsed();
-            
+
             if response.status() == 200 {
                 stats.increment_success();
                 // Uncomment for detailed logging:
@@ -174,12 +200,16 @@ async fn send_request(client: Client, url: &str, stats: Statistics) {
                 // Uncomment for detailed logging:
                 // error!("429: 请求过于频繁, 耗时: {}ms", duration.as_millis());
             } else {
-                error!("请求失败, 状态码: {}, 耗时: {}ms", response.status(), duration.as_millis());
+                error!(
+                    "请求失败, 状态码: {}, 耗时: {}ms",
+                    response.status(),
+                    duration.as_millis()
+                );
             }
         }
         Err(e) => {
             let duration = start.elapsed();
-            
+
             // Check if it's a reqwest error with status 429
             if let Some(status) = e.status() {
                 if status == 429 {
@@ -189,7 +219,7 @@ async fn send_request(client: Client, url: &str, stats: Statistics) {
                     return;
                 }
             }
-            
+
             error!("请求失败, 耗时: {}ms, 错误: {}", duration.as_millis(), e);
         }
     }

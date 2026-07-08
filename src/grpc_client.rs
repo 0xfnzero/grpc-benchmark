@@ -25,14 +25,16 @@ impl GrpcClient {
 
         // Configure authentication token
         if let Some(token) = token {
-            builder = builder.x_token(Some(token.to_string()))
+            builder = builder
+                .x_token(Some(token.to_string()))
                 .map_err(|e| BenchmarkError::ConfigError(format!("Token error: {}", e)))?;
         }
 
         // Configure TLS for HTTPS endpoints
         if url.starts_with("https://") {
             let tls_config = ClientTlsConfig::new().with_native_roots();
-            builder = builder.tls_config(tls_config)
+            builder = builder
+                .tls_config(tls_config)
                 .map_err(|e| BenchmarkError::ConfigError(format!("TLS config error: {}", e)))?;
         }
 
@@ -47,7 +49,9 @@ impl GrpcClient {
             .keep_alive_while_idle(true);
 
         // Test the connection
-        let _test_client = builder.connect().await
+        let _test_client = builder
+            .connect()
+            .await
             .map_err(|e| BenchmarkError::GrpcError(tonic::Status::unavailable(e.to_string())))?;
 
         // Connection successful, store the parameters
@@ -72,10 +76,13 @@ impl GrpcClient {
 
     pub fn create_slot_subscription_request() -> SubscribeRequest {
         let mut slots_filter = HashMap::new();
-        slots_filter.insert("slot".to_string(), SubscribeRequestFilterSlots {
-            filter_by_commitment: Some(true),
-            ..Default::default()
-        });
+        slots_filter.insert(
+            "slot".to_string(),
+            SubscribeRequestFilterSlots {
+                filter_by_commitment: Some(true),
+                ..Default::default()
+            },
+        );
 
         SubscribeRequest {
             slots: slots_filter,

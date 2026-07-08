@@ -1,250 +1,237 @@
-# gRPC Benchmark Tool - Quick Start Guide
+# gRPC / Shred Benchmark Tool
+
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
 
-> grpc-benchmark is a Rust version built on [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts)
-, offering higher performance and a better deployment experience. ✅
+Rust benchmark tools for Solana Yellowstone gRPC endpoints and raw shred UDP sources.
 
-## Overview
+## Supported Binaries
 
-This guide will help you quickly download and run the gRPC benchmark tool on Ubuntu servers without compilation, using pre-compiled binary files directly.
+Release packages support macOS and Linux. The installer auto-detects:
 
-## What This Tool Measures
+- `x86_64-apple-darwin`
+- `aarch64-apple-darwin`
+- `x86_64-unknown-linux-gnu`
+- `aarch64-unknown-linux-gnu`
 
-grpc-benchmark provides prebuilt Rust binaries for comparing Solana Yellowstone gRPC endpoints, FzStream servers, and Jito Block Engine endpoints.
+## Benchmark Order
+
+Comparison benchmarks are listed first because they are the main latency-comparison workflows.
 
 | Binary | Script | Measures |
 |--------|--------|----------|
-| `grpc-comparison` | `run-grpc-comparison.sh` | Throughput, latency, and error rate across multiple Yellowstone gRPC endpoints |
-| `grpc-vs-fzstream` | `run-grpc-vs-fzstream.sh` | Slot reception order and latency between gRPC and FzStream |
-| `latency-test` | `run-latency-test.sh` | Repeated endpoint latency, min/max/average, and success rate |
-| `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine request performance under configurable concurrency |
+| `grpc-comparison` | `run-grpc-comparison.sh` | First-slot order and latency across Yellowstone gRPC endpoints |
+| `shred-comparison` | `run-shred-comparison.sh` | First-slot latency between two raw shred UDP sources |
+| `grpc-vs-shred` | `run-grpc-vs-shred.sh` | First-slot latency between Yellowstone gRPC and raw shred |
+| `latency-test` | `run-latency-test.sh` | Single gRPC endpoint ping/subscription latency |
+| `shred` | `run-shred.sh` | Raw shred UDP listener with first-slot and decoded-segment logs |
+| `shred-benchmark` | `run-shred-benchmark.sh` | Raw shred UDP throughput and Entry/transaction decode stats |
+| `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine HTTP request performance |
 
-## Install Speed Test Tool
+The old private stream entrypoint has been removed. Raw shred decoding does not depend on Jito ShredStream services. The default `ledger` mode parses Solana wire headers directly, streams contiguous data shred batches into `bincode Vec<Entry>`, and can use Merkle Reed-Solomon FEC to recover missing data shreds. `shred-comparison` and `grpc-vs-shred` disable Entry decoding by default and use first valid shred header arrival for lowest-latency slot comparison.
 
-### 1. Download Installation Script
+## Install
+
+macOS and Linux:
 
 ```bash
-cd /root
-
-# Get installation script
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/install.sh
-
-# Grant executable permission
+curl -fsSL -o install.sh https://github.com/0xfnzero/grpc-benchmark/releases/latest/download/install.sh
 chmod +x install.sh
-
-# Execute installation script
-sudo ./install.sh
+./install.sh
+cd "$HOME/grpc-benchmark"
 ```
 
-### 2. Verify Download
+Install a specific release tag or directory:
 
 ```bash
-# Check if files exist
-ls -la
-
-# You should see the following files:
-# - grpc-comparison (binary file)
-# - benchmark-jito (binary file)
-# - latency-test (binary file)
-# - grpc-vs-fzstream (binary file)
-# - run-grpc-comparison.sh (script)
-# - run-benchmark-jito.sh (script)
-# - run-latency-test.sh (script)
-# - run-grpc-vs-fzstream.sh (script)
+VERSION=v1.4 ./install.sh
+INSTALL_DIR=/opt/grpc-benchmark sudo -E ./install.sh
 ```
 
-## gRPC Comparison Test
+If `INSTALL_DIR` already exists and was not created by this installer, the installer refuses to replace it. To intentionally replace it, set `FORCE_INSTALL=1`; the previous directory is moved to a timestamped backup first.
 
-**Edit the `run-grpc-comparison.sh` file:**
+If you need to force a platform asset:
 
 ```bash
-vim run-grpc-comparison.sh
+TARGET=x86_64-unknown-linux-gnu VERSION=v1.4 ./install.sh
 ```
 
-**Configuration to modify:**
+## Comparison Benchmarks
+
+### gRPC vs gRPC
+
+Edit `run-grpc-comparison.sh`:
+
 ```bash
-# Endpoint 1 configuration
-export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint1
-export GRPC_NAME_1="Public_Node"    # Name of endpoint1
-export GRPC_TOKEN_1=""              # Authentication token for endpoint1
+export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_NAME_1="Public_Node"
+export GRPC_TOKEN_1=""
 
-# Endpoint 2 configuration
-export GRPC_URL_2="http://64.130.32.158:10900"  # Change to your endpoint2
-export GRPC_NAME_2="Self_Node"  # Name of endpoint2
-export GRPC_TOKEN_2=""          # Authentication token for endpoint2
+export GRPC_URL_2="https://your-grpc-endpoint.com:443"
+export GRPC_NAME_2="Custom_Node"
+export GRPC_TOKEN_2=""
 
-# Test configuration
-export GRPC_COMPARISON_DURATION_SEC=30  # Test duration (seconds)
-export CONCURRENCY=10                   # Concurrency level
-```
-
-**Run gRPC Endpoint Comparison Test**
-```bash
-# Run gRPC endpoint comparison test
+export GRPC_COMPARISON_DURATION_SEC=30
 ./run-grpc-comparison.sh
 ```
 
-### 2. gRPC vs FzStream Comparison Test
+### Shred vs Shred
 
-**Edit the `run-grpc-vs-fzstream.sh` file:**
+Forward two raw shred sources to two local UDP ports:
 
 ```bash
-vim run-grpc-vs-fzstream.sh
+export SHRED_BIND_1="0.0.0.0:20000"
+export SHRED_NAME_1="Shred_A"
+export SHRED_DECODE_MODE_1="ledger"
+
+export SHRED_BIND_2="0.0.0.0:20001"
+export SHRED_NAME_2="Shred_B"
+export SHRED_DECODE_MODE_2="ledger"
+
+export SHRED_COMPARISON_DURATION_SEC=30
+./run-shred-comparison.sh
 ```
 
-**Configuration to modify:**
+### gRPC vs Shred
+
 ```bash
-# FzStream configuration
-export FZSTREAM_SERVER_ADDRESS="127.0.0.1:2222"  # FzStream server address
-export AUTH_TOKEN="demo_token"  # FzStream authentication token
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_TOKEN=""
+export GRPC_NAME="gRPC"
 
-# gRPC configuration
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC endpoint
-export GRPC_TOKEN=""  # gRPC authentication token (optional)
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_NAME="Shred"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=false
 
-# Test configuration
-export TEST_DURATION=30  # Test duration (seconds)
+export TEST_DURATION=30
+./run-grpc-vs-shred.sh
 ```
 
-**Run gRPC vs FzStream Comparison Test**
-```bash
-# Run gRPC vs FzStream comparison test
-./run-grpc-vs-fzstream.sh
-```
+## Single-Source Benchmarks
 
-### 3. Latency Test
-
-**Edit the `run-latency-test.sh` file:**
+### gRPC Latency
 
 ```bash
-vim run-latency-test.sh
-```
-
-**Configuration to modify:**
-```bash
-# Default gRPC endpoint configuration
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # Change to your endpoint
-export GRPC_TOKEN=""  # If authentication is required, enter your token
-
-# Test parameters
-export TOTAL_ROUNDS=10        # Number of test rounds
-export PING_INTERVAL_MS=1000  # Ping interval (milliseconds)
-export TEST_TIMEOUT=120       # Timeout (seconds)
-```
-
-**Run Latency Test**
-```bash
-# Run latency test
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_TOKEN=""
+export TOTAL_ROUNDS=10
 ./run-latency-test.sh
 ```
 
-### 4. Jito Benchmark Test Configuration
-
-**Edit the `run-benchmark-jito.sh` file:**
+### Shred Listener
 
 ```bash
-vim run-benchmark-jito.sh
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=true
+export SHRED_ENABLE_FEC=true
+export SHRED_DURATION_SEC=30
+./run-shred.sh
 ```
 
-**Configuration to modify:**
+For ShredStream SDK fixed-offset payloads:
+
 ```bash
-# Jito configuration
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # Change to your Jito endpoint
-export JITO_CONCURRENCY=10  # Concurrency level
+export SHRED_DECODE_MODE="compat"
+./run-shred.sh
 ```
 
-**Run Jito Benchmark Test**
+### Shred Throughput And Decode Benchmark
+
 ```bash
-# Run Jito benchmark test
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=true
+export SHRED_ENABLE_FEC=true
+export SHRED_BENCHMARK_DURATION_SEC=30
+export SHRED_RECV_BUFFER_BYTES=134217728
+./run-shred-benchmark.sh
+```
+
+### Jito Block Engine HTTP Benchmark
+
+```bash
+export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
+export JITO_CONCURRENCY=10
+export JITO_DURATION_SEC=0   # 0 = run until stopped
 ./run-benchmark-jito.sh
 ```
 
-## Common Configuration Examples
+This is not Jito ShredStream.
 
-### 1. Adjusting Test Parameters
-
-```bash
-# Modify run-grpc-comparison.sh
-export GRPC_COMPARISON_DURATION_SEC=60  # Test for 1 minute
-export CONCURRENCY=20                   # Increase concurrency
-```
-
-### 2. Configure FzStream vs gRPC Comparison
+## Common Shred Settings
 
 ```bash
-# Modify run-grpc-vs-fzstream.sh
-export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
-export AUTH_TOKEN="your-fzstream-token"
-export GRPC_URL="https://your-grpc-endpoint.com:443"
-export TEST_DURATION=60  # Test for 60 seconds
+export SHRED_DECODE_MODE="ledger"              # ledger/raw/agave or compat/sdk
+export SHRED_DECODE_ENTRIES=true               # false = header-only fast path
+export SHRED_ENABLE_FEC=true                   # Merkle Reed-Solomon recovery in ledger mode
+export SHRED_RECV_BUFFER_BYTES=134217728
+export SHRED_UDP_PAYLOAD_PREFIX_SKIP=0
+export SHRED_MAX_TRACKED_SLOTS=128
+export SHRED_REASSEMBLY_GAP_TIMEOUT_MS=500
+export SHRED_STUCK_BATCH_TIMEOUT_MS=50
+export SHRED_MAX_FEC_SETS_PER_SLOT=32
 ```
 
-### 3. Adding More Endpoints
+## Build Release Assets
+
+Build the host platform package:
 
 ```bash
-# Add endpoint3 in run-grpc-comparison.sh
-export GRPC_URL_3="https://endpoint3.com:443"
-export GRPC_NAME_3="Endpoint_3"
-export GRPC_TOKEN_3=""
+VERSION=v1.4 ./compile.sh
 ```
 
-### 4. Using Custom Endpoints
+Build multiple macOS/Linux packages when the required Rust targets and linkers are available:
 
 ```bash
-# Modify run-latency-test.sh
-export GRPC_URL="https://your-custom-endpoint.com:443"
-export GRPC_TOKEN="your-auth-token"
+rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
+
+VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 ```
 
-## Output Description
+Release assets are generated under `release/`:
 
-### Latency Test Output
-- Average latency time
-- Minimum/maximum latency
-- Latency distribution statistics
-- Success rate
-
-### gRPC Comparison Test Output
-- Performance comparison of endpoints
-- Throughput statistics
-- Error rate statistics
-- Latency comparison
-
-### Jito Benchmark Test Output
-- Block engine performance
-- Transaction processing speed
-- Error statistics
-
-### gRPC vs FzStream Comparison Test Output
-- Real-time slot reception comparison
-- Latency statistics (FzStream vs gRPC)
-- First reception statistics
-- Performance analysis report
-- Average latency comparison
-
-**Output Example:**
-```
-[00:18:20.759] gRPC     接收 slot 362449176 : 首次接收
-[00:18:20.759] FzStream 接收 slot 362449176 : 延迟   0.63ms (相对于 gRPC)
-[00:18:21.763] gRPC     接收 slot 362449177 : 首次接收
-[00:18:21.763] FzStream 接收 slot 362449177 : 延迟   1.91ms (相对于 gRPC)
-
-📊 gRPC Performance Analysis
-Total received blocks: 1250 blocks
-First received blocks: 758 (60.64%) blocks
-Delayed received blocks: 492 (39.36%) blocks
-
-📊 FzStream Performance Analysis
-Total received blocks: 1250 blocks
-First received blocks: 492 (39.36%) blocks
-Delayed received blocks: 758 (60.64%) blocks
-Average latency: 1.25ms
+```text
+install.sh
+grpc-benchmark-x86_64-unknown-linux-gnu.tar.gz
+grpc-benchmark-aarch64-unknown-linux-gnu.tar.gz
+grpc-benchmark-x86_64-apple-darwin.tar.gz
+grpc-benchmark-aarch64-apple-darwin.tar.gz
+SHA256SUMS
 ```
 
-## Important Notes
+## Create Tag And GitHub Release
 
-1. **Network Requirements**: Ensure the server can access gRPC endpoints
-2. **Authentication Tokens**: Some endpoints may require API tokens
-3. **Test Duration**: Long-term tests may generate large amounts of data
-4. **Resource Consumption**: High concurrency tests may consume more CPU and memory
-5. **Endpoint Limits**: Pay attention to endpoint rate limits
+Recommended release flow: push a `v*` tag. GitHub Actions builds and uploads all macOS/Linux binary packages automatically:
+
+```bash
+git tag v1.4
+git push origin v1.4
+```
+
+The release workflow publishes:
+
+```text
+install.sh
+grpc-benchmark-x86_64-unknown-linux-gnu.tar.gz
+grpc-benchmark-aarch64-unknown-linux-gnu.tar.gz
+grpc-benchmark-x86_64-apple-darwin.tar.gz
+grpc-benchmark-aarch64-apple-darwin.tar.gz
+SHA256SUMS
+```
+
+Manual fallback:
+
+```bash
+VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+
+git tag v1.4
+git push origin v1.4
+
+gh release create v1.4 \
+  release/install.sh \
+  release/grpc-benchmark-*.tar.gz \
+  release/SHA256SUMS \
+  --title "v1.4" \
+  --notes "gRPC/Shred comparison benchmarks and raw shred decoding updates"
+```

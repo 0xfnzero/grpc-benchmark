@@ -33,7 +33,7 @@ impl LatencyStats {
     pub fn add_latency(&mut self, latency: f64) {
         self.latencies.push(latency);
         self.count = self.latencies.len();
-        
+
         if self.count == 1 {
             self.min = latency;
             self.max = latency;
@@ -53,7 +53,7 @@ impl LatencyStats {
         }
 
         self.latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         self.mean = mean(&self.latencies);
         self.median = median(&self.latencies);
         self.std_dev = standard_deviation(&self.latencies, Some(self.mean));
@@ -64,7 +64,7 @@ impl LatencyStats {
     pub fn print_summary(&self, name: &str) {
         println!("===== {} Performance Analysis =====", name);
         println!("Sample count: {}", self.count);
-        
+
         if self.count > 0 {
             println!("Latency statistics:");
             println!("  Average latency: {:.2}ms", self.mean);
@@ -88,11 +88,11 @@ impl Default for LatencyStats {
 
 pub fn calculate_stats(latencies: &[f64]) -> LatencyStats {
     let mut stats = LatencyStats::new();
-    
+
     for &latency in latencies {
         stats.add_latency(latency);
     }
-    
+
     stats.calculate();
     stats
 }
@@ -101,14 +101,10 @@ pub fn percentile(data: &[f64], p: f64) -> f64 {
     if data.is_empty() {
         return 0.0;
     }
-    
-    let index = (data.len() as f64 * p) as usize;
-    let index = if index >= data.len() {
-        data.len() - 1
-    } else {
-        index
-    };
-    
+
+    let index = ((data.len() as f64 * p).ceil() as usize).saturating_sub(1);
+    let index = index.min(data.len() - 1);
+
     data[index]
 }
 
@@ -194,7 +190,7 @@ mod tests {
     fn test_latency_stats() {
         let latencies = vec![10.0, 20.0, 15.0, 25.0, 30.0];
         let stats = calculate_stats(&latencies);
-        
+
         assert_eq!(stats.count, 5);
         assert_eq!(stats.min, 10.0);
         assert_eq!(stats.max, 30.0);

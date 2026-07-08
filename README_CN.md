@@ -1,253 +1,237 @@
-# gRPC 基准测试工具 - 快速使用指南
+# gRPC / Shred 基准测试工具
+
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
 
-> grpc-benchmark是基于 [ChainBuff/grpc-benchmark-ts](https://github.com/ChainBuff/grpc-benchmark-ts) 构建的 Rust 版本，提供更高效的性能和更好的部署体验。✅
+用于测试 Solana Yellowstone gRPC 端点和 raw shred UDP 数据源的 Rust 工具。
 
-## 概述
+## 二进制平台支持
 
-本指南将帮助您在 Ubuntu 服务器上快速下载和运行 gRPC 基准测试工具，无需编译，直接使用预编译的二进制文件。
+Release 包支持 macOS 和 Linux，安装脚本会自动识别：
 
-## 这个工具测试什么
+- `x86_64-apple-darwin`
+- `aarch64-apple-darwin`
+- `x86_64-unknown-linux-gnu`
+- `aarch64-unknown-linux-gnu`
 
-grpc-benchmark 提供预编译 Rust 二进制文件，用于对比 Solana Yellowstone gRPC 端点、FzStream 服务和 Jito Block Engine 端点的性能。
+## 测速排序
+
+对比测速是主要场景，所以在 README 和教程里排在前面。
 
 | 二进制 | 脚本 | 测试内容 |
 |--------|------|----------|
-| `grpc-comparison` | `run-grpc-comparison.sh` | 多个 Yellowstone gRPC 端点的吞吐、延迟和错误率 |
-| `grpc-vs-fzstream` | `run-grpc-vs-fzstream.sh` | gRPC 与 FzStream 的 slot 首次接收顺序和延迟 |
-| `latency-test` | `run-latency-test.sh` | 端点重复延迟、最小/最大/平均值和成功率 |
-| `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine 在可配置并发下的请求性能 |
+| `grpc-comparison` | `run-grpc-comparison.sh` | 多个 Yellowstone gRPC 端点的 slot 首达顺序和延迟 |
+| `shred-comparison` | `run-shred-comparison.sh` | 两个 raw shred UDP 源之间的 slot 首达延迟 |
+| `grpc-vs-shred` | `run-grpc-vs-shred.sh` | Yellowstone gRPC 和 raw shred 之间的 slot 首达延迟 |
+| `latency-test` | `run-latency-test.sh` | 单个 gRPC 端点 ping/订阅延迟 |
+| `shred` | `run-shred.sh` | 监听 raw shred UDP，打印首次看到的 slot 和解码片段 |
+| `shred-benchmark` | `run-shred-benchmark.sh` | raw shred UDP 吞吐、Entry/交易解码统计 |
+| `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine HTTP 请求性能 |
 
-## 安装测速工具
+旧的私有流入口已移除。raw shred 解码不依赖 Jito ShredStream 服务。默认 `ledger` 模式直接解析 Solana wire header，按连续 data shred 流式解码 `bincode Vec<Entry>`，并可用 Merkle Reed-Solomon FEC 恢复缺失 data shred。`shred-comparison` 和 `grpc-vs-shred` 默认关闭 Entry 解码，只用首次合法 shred header 到达时间做最低延迟 slot 对比。
 
-### 1. 下载安装脚本
+## 安装
+
+macOS 和 Linux：
 
 ```bash
-cd /root
-
-# 获取安装脚本
-wget https://github.com/0xfnzero/grpc-benchmark/releases/download/v1.3/install.sh
-
-# 授权可执行权限
+curl -fsSL -o install.sh https://github.com/0xfnzero/grpc-benchmark/releases/latest/download/install.sh
 chmod +x install.sh
-
-# 执行安装脚本
-sudo ./install.sh
-
-# 进入grpc-benchmark
-cd grpc-benchmark
+./install.sh
+cd "$HOME/grpc-benchmark"
 ```
 
-### 2. 验证下载
+指定 release tag 或安装目录：
 
 ```bash
-# 检查文件是否存在
-ls -la
-
-# 应该看到以下文件：
-# - grpc-comparison (二进制文件)
-# - benchmark-jito (二进制文件)
-# - latency-test (二进制文件)
-# - grpc-vs-fzstream (二进制文件)
-# - run-grpc-comparison.sh (脚本)
-# - run-benchmark-jito.sh (脚本)
-# - run-latency-test.sh (脚本)
-# - run-grpc-vs-fzstream.sh (脚本)
+VERSION=v1.4 ./install.sh
+INSTALL_DIR=/opt/grpc-benchmark sudo -E ./install.sh
 ```
 
-##  gRPC 比较测试
+如果 `INSTALL_DIR` 已存在且不是本安装脚本创建的目录，安装脚本会拒绝覆盖。确实要替换时设置 `FORCE_INSTALL=1`，旧目录会先移动到带时间戳的备份路径。
 
-**编辑 `run-grpc-comparison.sh` 文件：**
+强制指定平台包：
 
 ```bash
-vim run-grpc-comparison.sh
+TARGET=x86_64-unknown-linux-gnu VERSION=v1.4 ./install.sh
 ```
 
-**需要修改的配置：**
+## 对比测速
+
+### gRPC vs gRPC
+
+编辑 `run-grpc-comparison.sh`：
+
 ```bash
-# 端点 1 配置
-export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点1
-export GRPC_NAME_1="Public_Node"    # 端点1的名称
-export GRPC_TOKEN_1=""              # 端点1的认证令牌
+export GRPC_URL_1="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_NAME_1="Public_Node"
+export GRPC_TOKEN_1=""
 
-# 端点 2 配置
-export GRPC_URL_2="http://64.130.32.158:10900"  # 修改为您的端点2
-export GRPC_NAME_2="Self_Node"  # 端点2的名称
-export GRPC_TOKEN_2=""          # 端点2的认证令牌
+export GRPC_URL_2="https://your-grpc-endpoint.com:443"
+export GRPC_NAME_2="Custom_Node"
+export GRPC_TOKEN_2=""
 
-# 测试配置
-export GRPC_COMPARISON_DURATION_SEC=30  # 测试持续时间（秒）
-export CONCURRENCY=10                   # 并发级别
-```
-
-**运行 gRPC 端点比较测试** 
-```bash
-# 运行 gRPC 端点比较测试
+export GRPC_COMPARISON_DURATION_SEC=30
 ./run-grpc-comparison.sh
 ```
 
-### 2. gRPC vs FzStream 对比测试
+### Shred vs Shred
 
-**编辑 `run-grpc-vs-fzstream.sh` 文件：**
+把两个 raw shred 数据源分别转发到两个本地 UDP 端口：
 
 ```bash
-vim run-grpc-vs-fzstream.sh
+export SHRED_BIND_1="0.0.0.0:20000"
+export SHRED_NAME_1="Shred_A"
+export SHRED_DECODE_MODE_1="ledger"
+
+export SHRED_BIND_2="0.0.0.0:20001"
+export SHRED_NAME_2="Shred_B"
+export SHRED_DECODE_MODE_2="ledger"
+
+export SHRED_COMPARISON_DURATION_SEC=30
+./run-shred-comparison.sh
 ```
 
-**需要修改的配置：**
+### gRPC vs Shred
+
 ```bash
-# FzStream 配置
-export FZSTREAM_SERVER_ADDRESS="127.0.0.1:2222"  # FzStream 服务器地址
-export AUTH_TOKEN="demo_token"  # FzStream 认证令牌
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_TOKEN=""
+export GRPC_NAME="gRPC"
 
-# gRPC 配置
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # gRPC 端点
-export GRPC_TOKEN=""  # gRPC 认证令牌（可选）
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_NAME="Shred"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=false
 
-# 测试配置
-export TEST_DURATION=30  # 测试持续时间（秒）
+export TEST_DURATION=30
+./run-grpc-vs-shred.sh
 ```
 
-**运行 gRPC vs FzStream 对比测试**
-```bash
-# 运行 gRPC vs FzStream 对比测试
-./run-grpc-vs-fzstream.sh
-```
+## 单源测速和工具
 
-### 3. 延迟测试
-
-**编辑 `run-latency-test.sh` 文件：**
+### gRPC 延迟
 
 ```bash
-vim run-latency-test.sh
-```
-
-**需要修改的配置：**
-```bash
-# 默认 gRPC 端点配置
-export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"  # 修改为您的端点
-export GRPC_TOKEN=""                                                  # 如果需要认证，填入您的令牌
-
-# 测试参数
-export TOTAL_ROUNDS=10        # 测试轮数
-export PING_INTERVAL_MS=1000  # ping 间隔（毫秒）
-export TEST_TIMEOUT=120       # 超时时间（秒）
-```
-
-**运行延迟测试**
-```bash
-# 运行延迟测试
+export GRPC_URL="https://solana-yellowstone-grpc.publicnode.com:443"
+export GRPC_TOKEN=""
+export TOTAL_ROUNDS=10
 ./run-latency-test.sh
 ```
 
-### 4. Jito 基准测试配置
-
-**编辑 `run-benchmark-jito.sh` 文件：**
+### Shred 监听
 
 ```bash
-vim run-benchmark-jito.sh
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=true
+export SHRED_ENABLE_FEC=true
+export SHRED_DURATION_SEC=30
+./run-shred.sh
 ```
 
-**需要修改的配置：**
+如果数据源是 ShredStream SDK 固定偏移格式：
+
 ```bash
-# Jito 配置
-export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"  # 修改为您的 Jito 端点
-export JITO_CONCURRENCY=10  # 并发级别
+export SHRED_DECODE_MODE="compat"
+./run-shred.sh
 ```
 
-**运行 Jito 基准测试**
+### Shred 吞吐和解码测速
+
 ```bash
-# 运行 Jito 基准测试
+export SHRED_BIND="0.0.0.0:20000"
+export SHRED_DECODE_MODE="ledger"
+export SHRED_DECODE_ENTRIES=true
+export SHRED_ENABLE_FEC=true
+export SHRED_BENCHMARK_DURATION_SEC=30
+export SHRED_RECV_BUFFER_BYTES=134217728
+./run-shred-benchmark.sh
+```
+
+### Jito Block Engine HTTP 测速
+
+```bash
+export JITO_URL="https://amsterdam.mainnet.block-engine.jito.wtf"
+export JITO_CONCURRENCY=10
+export JITO_DURATION_SEC=0   # 0 = 一直运行，直到手动停止
 ./run-benchmark-jito.sh
 ```
 
+这个不是 Jito ShredStream。
 
-## 常见配置示例
-
-### 1. 调整测试参数
-
-```bash
-# 修改 run-grpc-comparison.sh
-export GRPC_COMPARISON_DURATION_SEC=60  # 测试1分钟
-export CONCURRENCY=20                   # 增加并发
-```
-
-### 2. 配置 FzStream vs gRPC 对比
+## 常用 Shred 配置
 
 ```bash
-# 修改 run-grpc-vs-fzstream.sh
-export FZSTREAM_SERVER_ADDRESS="your-fzstream-server:2222"
-export AUTH_TOKEN="your-fzstream-token"
-export GRPC_URL="https://your-grpc-endpoint.com:443"
-export TEST_DURATION=60  # 测试60秒
+export SHRED_DECODE_MODE="ledger"              # ledger/raw/agave 或 compat/sdk
+export SHRED_DECODE_ENTRIES=true               # false = 只解析 header 的最快路径
+export SHRED_ENABLE_FEC=true                   # ledger 模式下启用 Merkle Reed-Solomon 恢复
+export SHRED_RECV_BUFFER_BYTES=134217728
+export SHRED_UDP_PAYLOAD_PREFIX_SKIP=0
+export SHRED_MAX_TRACKED_SLOTS=128
+export SHRED_REASSEMBLY_GAP_TIMEOUT_MS=500
+export SHRED_STUCK_BATCH_TIMEOUT_MS=50
+export SHRED_MAX_FEC_SETS_PER_SLOT=32
 ```
 
-### 3. 添加更多端点
+## 构建 Release 产物
+
+构建当前机器平台：
 
 ```bash
-# 在 run-grpc-comparison.sh 中添加端点3
-export GRPC_URL_3="https://endpoint3.com:443"
-export GRPC_NAME_3="Endpoint_3"
-export GRPC_TOKEN_3=""
+VERSION=v1.4 ./compile.sh
 ```
 
-### 4. 使用自定义端点
+如果本机或 CI 已配置对应 Rust target 和 linker，可以一次构建 macOS/Linux 多平台包：
 
 ```bash
-# 修改 run-latency-test.sh
-export GRPC_URL="https://your-custom-endpoint.com:443"
-export GRPC_TOKEN="your-auth-token"
+rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
+
+VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 ```
 
-## 输出说明
+产物在 `release/`：
 
-### 延迟测试输出
-- 平均延迟时间
-- 最小/最大延迟
-- 延迟分布统计
-- 成功率
-
-### gRPC 比较测试输出
-- 各端点的性能对比
-- 吞吐量统计
-- 错误率统计
-- 延迟对比
-
-### Jito 基准测试输出
-- 区块引擎性能
-- 交易处理速度
-- 错误统计
-
-### gRPC vs FzStream 对比测试输出
-- 实时slot接收对比
-- 延迟统计 (FzStream vs gRPC)
-- 首次接收统计
-- 性能分析报告
-- 平均延迟对比
-
-**输出示例：**
-```
-[00:18:20.759] gRPC     接收 slot 362449176 : 首次接收
-[00:18:20.759] FzStream 接收 slot 362449176 : 延迟   0.63ms (相对于 gRPC)
-[00:18:21.763] gRPC     接收 slot 362449177 : 首次接收
-[00:18:21.763] FzStream 接收 slot 362449177 : 延迟   1.91ms (相对于 gRPC)
-
-📊 gRPC 性能分析
-总接收区块数: 1250 blocks
-首先接收区块数: 758 (60.64%) blocks
-落后接收区块数: 492 (39.36%) blocks
-
-📊 FzStream 性能分析
-总接收区块数: 1250 blocks
-首先接收区块数: 492 (39.36%) blocks
-落后接收区块数: 758 (60.64%) blocks
-平均延迟: 1.25ms
+```text
+install.sh
+grpc-benchmark-x86_64-unknown-linux-gnu.tar.gz
+grpc-benchmark-aarch64-unknown-linux-gnu.tar.gz
+grpc-benchmark-x86_64-apple-darwin.tar.gz
+grpc-benchmark-aarch64-apple-darwin.tar.gz
+SHA256SUMS
 ```
 
-## 注意事项
+## 创建 Tag 和 GitHub Release
 
-1. **网络要求**：确保服务器能访问 gRPC 端点
-2. **认证令牌**：某些端点可能需要 API 令牌
-3. **测试时间**：长时间测试可能产生大量数据
-4. **资源消耗**：高并发测试可能消耗较多 CPU 和内存
-5. **端点限制**：注意端点的速率限制
+推荐流程：推送 `v*` tag。GitHub Actions 会自动构建并上传全部 macOS/Linux 二进制包：
+
+```bash
+git tag v1.4
+git push origin v1.4
+```
+
+release workflow 会发布：
+
+```text
+install.sh
+grpc-benchmark-x86_64-unknown-linux-gnu.tar.gz
+grpc-benchmark-aarch64-unknown-linux-gnu.tar.gz
+grpc-benchmark-x86_64-apple-darwin.tar.gz
+grpc-benchmark-aarch64-apple-darwin.tar.gz
+SHA256SUMS
+```
+
+手动兜底方式：
+
+```bash
+VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+
+git tag v1.4
+git push origin v1.4
+
+gh release create v1.4 \
+  release/install.sh \
+  release/grpc-benchmark-*.tar.gz \
+  release/SHA256SUMS \
+  --title "v1.4" \
+  --notes "gRPC/Shred 对比测速和 raw shred 解码更新"
+```

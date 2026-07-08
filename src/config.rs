@@ -10,7 +10,7 @@ pub struct Config {
     pub grpc_url: Option<String>,
 
     /// gRPC authentication token (X-Token)
-    #[arg(long, env = "GRPC_TOKEN")]
+    #[arg(long, env = "GRPC_TOKEN", hide_env_values = true)]
     pub grpc_token: Option<String>,
 
     /// Total number of ping requests to send
@@ -26,7 +26,11 @@ pub struct Config {
     pub test_duration_sec: u64,
 
     /// Jito URL for block engine tests
-    #[arg(long, env = "JITO_URL", default_value = "https://amsterdam.mainnet.block-engine.jito.wtf")]
+    #[arg(
+        long,
+        env = "JITO_URL",
+        default_value = "https://amsterdam.mainnet.block-engine.jito.wtf"
+    )]
     pub jito_url: String,
 
     /// Jito concurrency level
@@ -52,7 +56,7 @@ impl Config {
 
     pub fn get_grpc_endpoints(&self) -> Vec<GrpcEndpoint> {
         let mut endpoints = Vec::new();
-        
+
         // Check for environment variables with pattern GRPC_URL_*
         for (key, value) in std::env::vars() {
             if key.starts_with("GRPC_URL_") {
@@ -60,7 +64,7 @@ impl Config {
                 let name = std::env::var(format!("GRPC_NAME_{}", suffix))
                     .unwrap_or_else(|_| format!("GRPC_{}", suffix));
                 let token = std::env::var(format!("GRPC_TOKEN_{}", suffix)).ok();
-                
+
                 endpoints.push(GrpcEndpoint {
                     name,
                     url: value,

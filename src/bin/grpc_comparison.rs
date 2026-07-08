@@ -1,20 +1,20 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
+use chrono::{DateTime, Local};
 use clap::Parser;
 use dotenvy::dotenv;
 use futures::StreamExt;
+use grpc_benchmark::output::{ColoredOutput, EndpointStatus};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::time::{interval, sleep};
-use chrono::{DateTime, Local};
+use tonic::transport::ClientTlsConfig;
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::prelude::{
     subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest, SubscribeRequestFilterSlots,
 };
-use tonic::transport::ClientTlsConfig;
-use grpc_benchmark::output::{ColoredOutput, EndpointStatus};
 
 // Initialize rustls crypto provider
 use rustls;
@@ -26,7 +26,12 @@ fn init_crypto_provider() {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, env = "GRPC_COMPARISON_DURATION_SEC", default_value = "30")]
+    #[arg(
+        long,
+        env = "GRPC_COMPARISON_DURATION_SEC",
+        default_value_t = 30,
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
     duration: u64,
 
     #[arg(long)]
@@ -53,6 +58,20 @@ struct GrpcEndpoint {
     name: String,
     url: String,
     token: Option<String>,
+}
+
+fn ensure_unique_endpoint_names(endpoints: &[GrpcEndpoint]) -> Result<()> {
+    let mut seen = HashSet::new();
+    for endpoint in endpoints {
+        let name = endpoint.name.trim();
+        if name.is_empty() {
+            bail!("endpoint names must not be empty");
+        }
+        if !seen.insert(name.to_string()) {
+            bail!("duplicate endpoint name: {name}");
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -90,21 +109,28 @@ impl EndpointStats {
 fn log_info(msg: &str) {
     let now: DateTime<Local> = Local::now();
     use colored::*;
-    
+
     // 解析消息格式: "GRPC_NAME 接收 slot XXX: 延迟/首次接收"
     if let Some(captures) = extract_log_parts(msg) {
-        println!("{} {} {} {} {}", 
-                format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
-                format!("{:width$}", captures.grpc_name, width = get_max_name_length()).bright_white(),
-                captures.action.green(),
-                captures.slot_info.yellow(),
-                format!(": {}", captures.timing).magenta()
+        println!(
+            "{} {} {} {} {}",
+            format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
+            format!(
+                "{:width$}",
+                captures.grpc_name,
+                width = get_max_name_length()
+            )
+            .bright_white(),
+            captures.action.green(),
+            captures.slot_info.yellow(),
+            format!(": {}", captures.timing).magenta()
         );
     } else {
         // 如果不匹配模式，使用默认格式
-        println!("{} {}", 
-                format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
-                msg.green()
+        println!(
+            "{} {}",
+            format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
+            msg.green()
         );
     }
 }
@@ -133,18 +159,23 @@ fn extract_log_parts(msg: &str) -> Option<LogParts> {
     if let Some(pos) = msg.find("接收") {
         let grpc_name = msg[..pos].trim().to_string();
         let rest = &msg[pos..];
-        
+
         if let Some(colon_pos) = rest.find(':') {
             let slot_part = rest[..colon_pos].trim().to_string();
             let timing_part = rest[colon_pos + 1..].trim().to_string();
-            
+
             // 正确处理中文字符：去掉"接收"（2个中文字符）
             let slot_info = if slot_part.starts_with("接收") {
-                slot_part.chars().skip(2).collect::<String>().trim().to_string()
+                slot_part
+                    .chars()
+                    .skip(2)
+                    .collect::<String>()
+                    .trim()
+                    .to_string()
             } else {
                 slot_part
             };
-            
+
             return Some(LogParts {
                 grpc_name,
                 action: "接收".to_string(),
@@ -156,16 +187,23 @@ fn extract_log_parts(msg: &str) -> Option<LogParts> {
     None
 }
 
-async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec: u64) -> Result<()> {
+async fn compare_grpc_endpoints(
+    endpoints: Vec<GrpcEndpoint>,
+    test_duration_sec: u64,
+) -> Result<()> {
     // 计算最大端点名称长度用于对齐输出
     let max_name_length = endpoints.iter().map(|e| e.name.len()).max().unwrap_or(0);
     set_max_name_length(max_name_length);
-    
+
     log_info("开始对比多个 GRPC 服务性能...");
     log_info(&format!("测试持续时间: {}秒", test_duration_sec));
     log_info(&format!(
         "测试端点: {}",
-        endpoints.iter().map(|e| e.name.as_str()).collect::<Vec<_>>().join(", ")
+        endpoints
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     ));
 
     let start_time = Instant::now();
@@ -218,7 +256,10 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
 
         let slot_values: Vec<u64> = first_slots.values().copied().collect();
         let max_slot = *slot_values.iter().max().unwrap();
-        log_info(&format!("使用最大slot {} 作为基准进行对比 (最新区块)", max_slot));
+        log_info(&format!(
+            "使用最大slot {} 作为基准进行对比 (最新区块)",
+            max_slot
+        ));
 
         let mut invalid_endpoints = Vec::new();
 
@@ -240,10 +281,16 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
         }
 
         if !invalid_endpoints.is_empty() {
-            log_info(&format!("以下端点因slot落后过多被排除: {}", invalid_endpoints.join(", ")));
+            log_info(&format!(
+                "以下端点因slot落后过多被排除: {}",
+                invalid_endpoints.join(", ")
+            ));
 
             if active.len() < 2 {
-                log_info(&format!("剩余可用端点不足两个 (当前{}个), 无法进行对比分析", active.len()));
+                log_info(&format!(
+                    "剩余可用端点不足两个 (当前{}个), 无法进行对比分析",
+                    active.len()
+                ));
                 return false;
             }
         }
@@ -272,8 +319,10 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
             let active_endpoint_data: Vec<_> = block_data_list
                 .iter()
                 .filter(|data| {
-                    active.contains(&data.endpoint) &&
-                    stats.get(&data.endpoint).map_or(false, |s| s.has_received_data)
+                    active.contains(&data.endpoint)
+                        && stats
+                            .get(&data.endpoint)
+                            .map_or(false, |s| s.has_received_data)
                 })
                 .cloned()
                 .collect();
@@ -290,14 +339,13 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 // 按时间戳排序，确保稳定的排序结果
                 let mut sorted_data = active_endpoint_data.clone();
                 sorted_data.sort_by(|a, b| {
-                    a.timestamp.cmp(&b.timestamp)
+                    a.timestamp
+                        .cmp(&b.timestamp)
                         .then_with(|| a.endpoint.cmp(&b.endpoint))
                 });
 
                 // 找到真正最早的端点（第一个）
-                let first_endpoint = sorted_data
-                    .first()
-                    .unwrap();
+                let first_endpoint = sorted_data.first().unwrap();
 
                 // 首先输出首次接收的端点
                 if let Some(stat) = stats.get_mut(&first_endpoint.endpoint) {
@@ -313,8 +361,13 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 // 然后按排序顺序输出延迟的端点
                 for bd in &sorted_data {
                     if bd.endpoint != first_endpoint.endpoint {
-                        let latency = bd.timestamp.duration_since(first_endpoint.timestamp).as_nanos() as f64 / 1_000_000.0;
-                        if latency >= 0.01 { // 只显示大于0.01ms的延迟
+                        let latency = bd
+                            .timestamp
+                            .duration_since(first_endpoint.timestamp)
+                            .as_nanos() as f64
+                            / 1_000_000.0;
+                        if latency >= 0.01 {
+                            // 只显示大于0.01ms的延迟
                             if let Some(stat) = stats.get_mut(&bd.endpoint) {
                                 stat.latencies.push(latency);
                                 stat.total_latency += latency;
@@ -357,7 +410,9 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
 
             log_info(&format!("尝试连接到 {}...", endpoint.name));
             builder.connect().await.map_err(anyhow::Error::from)
-        }).await {
+        })
+        .await
+        {
             Ok(client) => client,
             Err(e) => {
                 log_info(&format!("连接 {} 失败: {:?}", endpoint.name, e));
@@ -371,7 +426,6 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
             }
         };
 
-
         let endpoint_name = endpoint.name.clone();
         let block_data_by_slot = block_data_by_slot.clone();
         let endpoint_stats = endpoint_stats.clone();
@@ -384,10 +438,13 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
 
         let task = tokio::spawn(async move {
             let mut slots_filter = HashMap::new();
-            slots_filter.insert("slot".to_string(), SubscribeRequestFilterSlots {
-                filter_by_commitment: Some(true),
-                ..Default::default()
-            });
+            slots_filter.insert(
+                "slot".to_string(),
+                SubscribeRequestFilterSlots {
+                    filter_by_commitment: Some(true),
+                    ..Default::default()
+                },
+            );
 
             let request = SubscribeRequest {
                 slots: slots_filter,
@@ -443,8 +500,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
 
                                 log_info(&format!(
                                     "{} 成功接收到第一个 slot {}, 确认为可用端点",
-                                    endpoint_name,
-                                    current_slot
+                                    endpoint_name, current_slot
                                 ));
 
                                 // 检查是否可以开始正式统计
@@ -455,23 +511,32 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                     let received_data_count = first_slots.len();
                                     let total_active_endpoints = active.len();
 
-                                    if received_data_count == total_active_endpoints && received_data_count >= 2 {
+                                    if received_data_count == total_active_endpoints
+                                        && received_data_count >= 2
+                                    {
                                         drop(first_slots);
                                         drop(active);
 
-                                        log_info("所有活跃端点都已收到第一个slot，开始检查slot差异...");
+                                        log_info(
+                                            "所有活跃端点都已收到第一个slot，开始检查slot差异...",
+                                        );
 
                                         if check_slots_alignment(
                                             first_received_slots.clone(),
                                             endpoint_stats.clone(),
-                                            active_endpoints.clone()
-                                        ).await {
+                                            active_endpoints.clone(),
+                                        )
+                                        .await
+                                        {
                                             let mut started = started_formal_stats.lock().await;
                                             *started = true;
                                             drop(started);
 
                                             let active = active_endpoints.lock().await;
-                                            log_info(&format!("有{}个有效端点, 开始正式统计...", active.len()));
+                                            log_info(&format!(
+                                                "有{}个有效端点, 开始正式统计...",
+                                                active.len()
+                                            ));
                                             drop(active);
 
                                             process_collected_data_fn(
@@ -479,7 +544,8 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                                 block_data_by_slot.clone(),
                                                 active_endpoints.clone(),
                                                 endpoint_stats.clone(),
-                                            ).await;
+                                            )
+                                            .await;
                                         }
                                     }
                                 }
@@ -501,14 +567,13 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                             let started = *started_formal_stats.lock().await;
                             if !started {
                                 let mut pending = pending_block_data.lock().await;
-                                pending
-                                    .entry(current_slot)
-                                    .or_insert_with(Vec::new)
-                                    .push(BlockData {
+                                pending.entry(current_slot).or_insert_with(Vec::new).push(
+                                    BlockData {
                                         endpoint: endpoint_name.clone(),
                                         slot: current_slot,
                                         timestamp,
-                                    });
+                                    },
+                                );
                                 drop(pending);
                                 continue;
                             }
@@ -535,17 +600,13 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                 .map(|bd| bd.endpoint.clone())
                                 .collect();
 
-                            let all_active_endpoints_received = active
-                                .iter()
-                                .all(|ep| received_endpoints.contains(ep));
+                            let all_active_endpoints_received =
+                                active.iter().all(|ep| received_endpoints.contains(ep));
 
                             if all_active_endpoints_received {
                                 let mut stats = endpoint_stats.lock().await;
                                 for endpoint in active.iter() {
-                                    if block_data_list
-                                        .iter()
-                                        .any(|bd| &bd.endpoint == endpoint)
-                                    {
+                                    if block_data_list.iter().any(|bd| &bd.endpoint == endpoint) {
                                         if let Some(stat) = stats.get_mut(endpoint) {
                                             stat.total_received += 1;
                                         }
@@ -568,14 +629,13 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                 // 按时间戳排序，确保稳定的排序结果
                                 let mut sorted_data = active_endpoint_data.clone();
                                 sorted_data.sort_by(|a, b| {
-                                    a.timestamp.cmp(&b.timestamp)
+                                    a.timestamp
+                                        .cmp(&b.timestamp)
                                         .then_with(|| a.endpoint.cmp(&b.endpoint))
                                 });
 
                                 // 找到真正最早的端点（第一个）
-                                let first_endpoint = sorted_data
-                                    .first()
-                                    .unwrap();
+                                let first_endpoint = sorted_data.first().unwrap();
 
                                 let mut stats = endpoint_stats.lock().await;
 
@@ -593,8 +653,14 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                                 // 然后按排序顺序输出延迟的端点
                                 for bd in &sorted_data {
                                     if bd.endpoint != first_endpoint.endpoint {
-                                        let latency = bd.timestamp.duration_since(first_endpoint.timestamp).as_nanos() as f64 / 1_000_000.0;
-                                        if latency >= 0.01 { // 只显示大于0.01ms的延迟
+                                        let latency = bd
+                                            .timestamp
+                                            .duration_since(first_endpoint.timestamp)
+                                            .as_nanos()
+                                            as f64
+                                            / 1_000_000.0;
+                                        if latency >= 0.01 {
+                                            // 只显示大于0.01ms的延迟
                                             if let Some(stat) = stats.get_mut(&bd.endpoint) {
                                                 stat.latencies.push(latency);
                                                 stat.total_latency += latency;
@@ -703,17 +769,29 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 };
 
                 let min_latency = stat.latencies.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-                let max_latency = stat.latencies.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+                let max_latency = stat
+                    .latencies
+                    .iter()
+                    .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
 
                 output.subheader(&format!("📊 {} 性能分析", endpoint.name));
                 output.metric("总接收区块数", &stat.total_received.to_string(), "blocks");
-                
-                let first_percent = (stat.first_received as f64 / stat.total_received as f64) * 100.0;
-                output.metric("首先接收区块数", &format!("{} ({:.2}%)", stat.first_received, first_percent), "blocks");
+
+                let first_percent =
+                    (stat.first_received as f64 / stat.total_received as f64) * 100.0;
+                output.metric(
+                    "首先接收区块数",
+                    &format!("{} ({:.2}%)", stat.first_received, first_percent),
+                    "blocks",
+                );
 
                 let delayed_count = stat.latencies.len();
                 let delayed_percent = (delayed_count as f64 / stat.total_received as f64) * 100.0;
-                output.metric("落后接收区块数", &format!("{} ({:.2}%)", delayed_count, delayed_percent), "blocks");
+                output.metric(
+                    "落后接收区块数",
+                    &format!("{} ({:.2}%)", delayed_count, delayed_percent),
+                    "blocks",
+                );
 
                 if !stat.latencies.is_empty() {
                     output.info("延迟统计 (相对于最快端点):");
@@ -723,7 +801,7 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 } else {
                     output.success("该端点始终是最快的，没有延迟数据");
                 }
-                
+
                 output.separator();
             } else {
                 output.warning(&format!("{}: 没有收集到数据", endpoint.name));
@@ -770,7 +848,8 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
                 0.0
             };
 
-            println!("{:12}: 首先接收 {:>6.2}%, 落后时平均延迟 {:>6.2}ms, 总体平均延迟 {:>6.2}ms",
+            println!(
+                "{:12}: 首先接收 {:>6.2}%, 落后时平均延迟 {:>6.2}ms, 总体平均延迟 {:>6.2}ms",
                 name,
                 first_percent * 100.0,
                 avg_latency_when_slower,
@@ -778,7 +857,10 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
             );
         }
     } else if sorted_endpoints.len() == 1 {
-        output.warning(&format!("只有一个可用端点 {}, 无法进行对比分析", sorted_endpoints[0].0));
+        output.warning(&format!(
+            "只有一个可用端点 {}, 无法进行对比分析",
+            sorted_endpoints[0].0
+        ));
     } else {
         output.error("没有任何可用端点收集到数据，无法进行对比分析");
     }
@@ -794,27 +876,28 @@ async fn compare_grpc_endpoints(endpoints: Vec<GrpcEndpoint>, test_duration_sec:
 async fn main() -> Result<()> {
     // Initialize crypto provider first
     init_crypto_provider();
-    
+
     // 加载环境变量
     dotenv().ok();
 
     let output = ColoredOutput::new();
     output.header("🚀 Solana gRPC Benchmark Tool");
-    
+
     let args = Args::parse();
 
     // 收集所有GRPC端点
     let mut endpoints = Vec::new();
 
     // 从环境变量读取端点
-    let env_vars: Vec<_> = env::vars()
+    let mut env_vars: Vec<_> = env::vars()
         .filter(|(key, _)| key.starts_with("GRPC_URL_"))
         .collect();
+    env_vars.sort_by(|(left, _), (right, _)| left.cmp(right));
 
     for (key, url) in env_vars {
         let index = key.strip_prefix("GRPC_URL_").unwrap();
-        let name = env::var(format!("GRPC_NAME_{}", index))
-            .unwrap_or_else(|_| format!("GRPC_{}", index));
+        let name =
+            env::var(format!("GRPC_NAME_{}", index)).unwrap_or_else(|_| format!("GRPC_{}", index));
         let token = env::var(format!("GRPC_TOKEN_{}", index)).ok();
 
         endpoints.push(GrpcEndpoint { name, url, token });
@@ -852,14 +935,18 @@ async fn main() -> Result<()> {
         });
     }
 
+    ensure_unique_endpoint_names(&endpoints)?;
+
     output.subheader("📋 Configured Endpoints");
     for endpoint in &endpoints {
-        output.endpoint_status(&format!("{} - {}", endpoint.name, endpoint.url), EndpointStatus::Connecting);
+        output.endpoint_status(
+            &format!("{} - {}", endpoint.name, endpoint.url),
+            EndpointStatus::Connecting,
+        );
     }
-    
+
     output.info(&format!("Test duration: {} seconds", args.duration));
     output.separator();
 
     compare_grpc_endpoints(endpoints, args.duration).await
 }
-
