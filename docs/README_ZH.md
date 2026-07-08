@@ -1,6 +1,6 @@
-# gRPC / Shred 基准测试工具
+# Solana Yellowstone gRPC / Raw Shred 基准测试工具
 
-本教程与根目录 README 保持一致，并把对比测速排在最前面。
+本教程与根目录 README 保持一致，并把对比测速排在最前面。工具覆盖 Solana Yellowstone gRPC、Geyser gRPC、raw shred/ShredStream 延迟、UDP shred 吞吐，以及 Jito Block Engine HTTP 测速。
 
 ## 平台二进制
 

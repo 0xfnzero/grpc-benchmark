@@ -1,8 +1,10 @@
-# gRPC / Shred Benchmark Tool
+# Solana Yellowstone gRPC / Raw Shred Benchmark
 
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
 
-Rust benchmark tools for Solana Yellowstone gRPC endpoints and raw shred UDP sources.
+High-performance Rust CLI for Solana latency benchmarking: Yellowstone gRPC vs gRPC, raw shred vs raw shred, and gRPC vs raw shred. It measures first-slot arrival latency, UDP shred throughput, Entry/transaction decode stats, and Jito Block Engine HTTP performance on macOS and Linux.
+
+**Keywords:** Solana benchmark, Yellowstone gRPC, Geyser gRPC, raw shred, ShredStream, shred latency, gRPC latency, validator infrastructure, Jito Block Engine.
 
 ## Supported Binaries
 

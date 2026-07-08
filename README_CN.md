@@ -1,8 +1,10 @@
-# gRPC / Shred 基准测试工具
+# Solana Yellowstone gRPC / Raw Shred 基准测试工具
 
 [中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
 
-用于测试 Solana Yellowstone gRPC 端点和 raw shred UDP 数据源的 Rust 工具。
+高性能 Rust CLI，用于 Solana 延迟测速：Yellowstone gRPC vs gRPC、raw shred vs raw shred、gRPC vs raw shred。支持 slot 首达延迟、UDP shred 吞吐、Entry/交易解码统计，以及 Jito Block Engine HTTP 性能测试，支持 macOS 和 Linux。
+
+**关键词:** Solana benchmark, Yellowstone gRPC, Geyser gRPC, raw shred, ShredStream, shred latency, gRPC latency, validator infrastructure, Jito Block Engine.
 
 ## 二进制平台支持
 

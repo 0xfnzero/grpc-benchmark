@@ -1,6 +1,6 @@
-# gRPC / Shred Benchmark Tool
+# Solana Yellowstone gRPC / Raw Shred Benchmark
 
-This guide mirrors the root README and keeps comparison benchmarks first.
+This guide mirrors the root README and keeps comparison benchmarks first. The tool targets Solana Yellowstone gRPC, Geyser gRPC, raw shred/ShredStream latency, UDP shred throughput, and Jito Block Engine HTTP benchmarking.
 
 ## Platform Binaries
 

@@ -5,6 +5,10 @@ edition = "2021"
 description = "High-performance benchmark tool for Solana Yellowstone gRPC endpoints and raw shred streams"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/0xfnzero/grpc-benchmark"
+homepage = "https://fnzero.dev"
+readme = "README.md"
+keywords = ["solana", "yellowstone-grpc", "benchmark", "shred", "latency"]
+categories = ["command-line-utilities", "development-tools::profiling"]
 
 [[bin]]
 name = "grpc-comparison"
