@@ -51,8 +51,11 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: gcc
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CC_x86_64_unknown_linux_gnu: gcc
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          AR_x86_64_unknown_linux_gnu: ar
           AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
         run: ./compile.sh
 

@@ -165,14 +165,15 @@ build_target() {
   rm -rf "$staging_root"
   mkdir -p "$package_dir"
 
-  for bin in "${BINS[@]}"; do
-    echo "   build $bin"
-    if [[ -n "$PKG" ]]; then
-      cargo build --release --target "$target" --package "$PKG" --bin "$bin"
-    else
-      cargo build --release --target "$target" --bin "$bin"
-    fi
+  echo "   build all binaries"
+  if [[ -n "$PKG" ]]; then
+    cargo build --release --target "$target" --package "$PKG" --bins
+  else
+    cargo build --release --target "$target" --bins
+  fi
 
+  for bin in "${BINS[@]}"; do
+    echo "   package $bin"
     local src_path="${target_dir}/${bin}"
     if [[ ! -f "$src_path" ]]; then
       local candidate
