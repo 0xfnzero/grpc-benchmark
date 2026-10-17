@@ -46,6 +46,8 @@ pub struct RawShredConfig {
     pub recv_buffer_bytes: usize,
     pub decode_mode: ShredDecodeMode,
     pub decode_entries: bool,
+    /// Capture transaction signatures only for transaction comparisons.
+    pub collect_signatures: bool,
     pub enable_fec: bool,
     pub udp_payload_prefix_skip: usize,
     pub max_tracked_slots: usize,
@@ -63,6 +65,7 @@ impl Default for RawShredConfig {
             recv_buffer_bytes: 128 * 1024 * 1024,
             decode_mode: ShredDecodeMode::Ledger,
             decode_entries: true,
+            collect_signatures: false,
             enable_fec: true,
             udp_payload_prefix_skip: 0,
             max_tracked_slots: 128,
@@ -173,13 +176,14 @@ pub struct ShredRunStats {
 }
 
 #[derive(Debug, Default)]
-struct ShredPacketOutcome {
-    slot: Option<u64>,
-    shred_type: Option<&'static str>,
-    index: Option<u32>,
+pub(crate) struct ShredPacketOutcome {
+    pub(crate) slot: Option<u64>,
+    pub(crate) shred_type: Option<&'static str>,
+    pub(crate) index: Option<u32>,
     decoded_segments: Vec<DecodedShredSegment>,
-    decode_errors: u64,
-    fec_recovered_data_shreds: u64,
+    pub(crate) signatures: Vec<[u8; 64]>,
+    pub(crate) decode_errors: u64,
+    pub(crate) fec_recovered_data_shreds: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -271,7 +275,10 @@ pub async fn run_shred_stream(
     Ok(stats)
 }
 
-async fn bind_shred_udp(addr: SocketAddr, recv_buffer_bytes: usize) -> Result<UdpSocket> {
+pub(crate) async fn bind_shred_udp(
+    addr: SocketAddr,
+    recv_buffer_bytes: usize,
+) -> Result<UdpSocket> {
     if recv_buffer_bytes == 0 {
         return UdpSocket::bind(addr).await.map_err(BenchmarkError::from);
     }
@@ -281,7 +288,7 @@ async fn bind_shred_udp(addr: SocketAddr, recv_buffer_bytes: usize) -> Result<Ud
         SocketAddr::V6(_) => socket2::Domain::IPV6,
     };
     let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
-    let _ = socket.set_reuse_address(true);
+    // A benchmark must exclusively own its port: sharing would split UDP traffic.
     let _ = socket.set_recv_buffer_size(recv_buffer_bytes);
     socket.set_nonblocking(true)?;
     socket.bind(&addr.into())?;
@@ -289,14 +296,14 @@ async fn bind_shred_udp(addr: SocketAddr, recv_buffer_bytes: usize) -> Result<Ud
     UdpSocket::from_std(std_socket).map_err(BenchmarkError::from)
 }
 
-enum ShredEngine {
+pub(crate) enum ShredEngine {
     Fast(FastShredParser),
     Ledger(DataShredReassembler),
     Compat(ShredstreamCompatReassembler),
 }
 
 impl ShredEngine {
-    fn new(config: &RawShredConfig) -> Self {
+    pub(crate) fn new(config: &RawShredConfig) -> Self {
         if !config.decode_entries {
             return Self::Fast(FastShredParser::new(
                 config.decode_mode,
@@ -306,15 +313,16 @@ impl ShredEngine {
 
         match config.decode_mode {
             ShredDecodeMode::Ledger => Self::Ledger(DataShredReassembler::new(config)),
-            ShredDecodeMode::Compat => Self::Compat(ShredstreamCompatReassembler::new(
+            ShredDecodeMode::Compat => Self::Compat(ShredstreamCompatReassembler::with_signatures(
                 config.forward_slot_watermark,
                 config.shredstream_max_slot_age,
                 config.udp_payload_prefix_skip,
+                config.collect_signatures,
             )),
         }
     }
 
-    fn push_packet(&mut self, packet: &[u8], now: Instant) -> ShredPacketOutcome {
+    pub(crate) fn push_packet(&mut self, packet: &[u8], now: Instant) -> ShredPacketOutcome {
         match self {
             Self::Fast(engine) => engine.push_packet(packet),
             Self::Ledger(engine) => engine.push_packet(packet, now),
@@ -322,7 +330,7 @@ impl ShredEngine {
         }
     }
 
-    fn evict_stale_slots(&mut self, now: Instant) -> usize {
+    pub(crate) fn evict_stale_slots(&mut self, now: Instant) -> usize {
         match self {
             Self::Fast(engine) => engine.evict_stale_slots(now),
             Self::Ledger(engine) => engine.evict_stale_slots(now),
@@ -331,7 +339,7 @@ impl ShredEngine {
     }
 }
 
-struct FastShredParser {
+pub(crate) struct FastShredParser {
     decode_mode: ShredDecodeMode,
     udp_payload_prefix_skip: usize,
 }
@@ -732,7 +740,41 @@ fn invalid_bincode_error(message: &'static str) -> bincode::Error {
     ))
 }
 
-fn count_entry(entry: &Entry, yielded_sigs: &mut FxHashSet<[u8; 64]>) -> DecodedCounts {
+/// Keeps the existing decoder deduplication and optionally exports newly decoded signatures.
+/// Clearing a batch's dedup set must not discard observations decoded earlier in the same packet.
+struct SignatureTracker {
+    seen: FxHashSet<[u8; 64]>,
+    collected: Option<Vec<[u8; 64]>>,
+}
+
+impl SignatureTracker {
+    fn new(collect: bool) -> Self {
+        Self {
+            seen: FxHashSet::default(),
+            collected: collect.then(Vec::new),
+        }
+    }
+    fn insert(&mut self, sig: [u8; 64]) -> bool {
+        let fresh = self.seen.insert(sig);
+        if fresh {
+            if let Some(collected) = &mut self.collected {
+                collected.push(sig);
+            }
+        }
+        fresh
+    }
+    fn clear(&mut self) {
+        self.seen.clear();
+    }
+    fn take(&mut self) -> Vec<[u8; 64]> {
+        self.collected
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+}
+
+fn count_entry(entry: &Entry, yielded_sigs: &mut SignatureTracker) -> DecodedCounts {
     let mut counts = DecodedCounts {
         entries: 1,
         transactions: 0,
@@ -785,7 +827,7 @@ impl StreamingEntryDecoder {
     fn push(
         &mut self,
         payload: &[u8],
-        yielded_sigs: &mut FxHashSet<[u8; 64]>,
+        yielded_sigs: &mut SignatureTracker,
     ) -> std::result::Result<DecodedCounts, bincode::Error> {
         self.buffer.extend_from_slice(payload);
         self.try_deserialize(yielded_sigs)
@@ -793,7 +835,7 @@ impl StreamingEntryDecoder {
 
     fn try_deserialize(
         &mut self,
-        yielded_sigs: &mut FxHashSet<[u8; 64]>,
+        yielded_sigs: &mut SignatureTracker,
     ) -> std::result::Result<DecodedCounts, bincode::Error> {
         if self.expected_count.is_none() && self.buffer.len() >= self.cursor + 8 {
             let count = u64::from_le_bytes(
@@ -850,10 +892,7 @@ fn validate_vec_prefix(bytes: &[u8]) -> bool {
     count <= MAX_ENTRY_COUNT
 }
 
-fn decode_batch_counts(
-    bytes: &[u8],
-    yielded_sigs: &mut FxHashSet<[u8; 64]>,
-) -> Option<DecodedCounts> {
+fn decode_batch_counts(bytes: &[u8], yielded_sigs: &mut SignatureTracker) -> Option<DecodedCounts> {
     if !validate_vec_prefix(bytes) {
         return None;
     }
@@ -865,10 +904,7 @@ fn decode_batch_counts(
     Some(counts)
 }
 
-fn decode_concatenated_counts(
-    bytes: &[u8],
-    yielded_sigs: &mut FxHashSet<[u8; 64]>,
-) -> DecodedCounts {
+fn decode_concatenated_counts(bytes: &[u8], yielded_sigs: &mut SignatureTracker) -> DecodedCounts {
     let mut counts = DecodedCounts::default();
     let mut offset = 0usize;
     let opts = bincode_opts(bytes.len() as u64);
@@ -1070,6 +1106,7 @@ impl FecSetBuffer {
 struct AccumulatorConfig {
     max_fec_sets_per_slot: usize,
     stuck_batch_timeout: Duration,
+    collect_signatures: bool,
 }
 
 struct PendingDataShred {
@@ -1096,7 +1133,7 @@ struct SlotAccumulator {
     batch_complete_indices: BTreeMap<u32, Instant>,
     streaming_cursor: u32,
     streaming_decoder: StreamingEntryDecoder,
-    yielded_sigs: FxHashSet<[u8; 64]>,
+    yielded_sigs: SignatureTracker,
     batch_start: u32,
     slot_complete: bool,
     decode_errors: u64,
@@ -1113,7 +1150,7 @@ impl SlotAccumulator {
             batch_complete_indices: BTreeMap::new(),
             streaming_cursor: 0,
             streaming_decoder: StreamingEntryDecoder::new(),
-            yielded_sigs: FxHashSet::default(),
+            yielded_sigs: SignatureTracker::new(cfg.collect_signatures),
             batch_start: 0,
             slot_complete: false,
             decode_errors: 0,
@@ -1153,10 +1190,9 @@ impl SlotAccumulator {
         let mut counts = DecodedCounts::default();
         self.advance_streaming(&mut counts);
 
-        if enable_fec
-            && self.streaming_cursor <= shred.index
-            && self.try_fec_fill(shred.fec_set_index, rs_cache)
-        {
+        // Parity can arrive before data. Advancing past this shred does not mean
+        // that the rest of its FEC set (including a missing tail) is complete.
+        if enable_fec && self.try_fec_fill(shred.fec_set_index, rs_cache) {
             self.advance_streaming(&mut counts);
         }
 
@@ -1567,6 +1603,7 @@ impl DataShredReassembler {
             accumulator_cfg: AccumulatorConfig {
                 max_fec_sets_per_slot: config.max_fec_sets_per_slot.max(1),
                 stuck_batch_timeout: Duration::from_millis(config.stuck_batch_timeout_ms.max(1)),
+                collect_signatures: config.collect_signatures,
             },
             forward_watermark: None,
             slots: FxHashMap::default(),
@@ -1646,6 +1683,7 @@ impl DataShredReassembler {
             }
         }
 
+        let mut signatures = Vec::new();
         if slot_complete {
             if let Some(mut state) = self.slots.remove(&shred.slot()) {
                 let errors_before = state.accumulator.decode_errors;
@@ -1667,7 +1705,10 @@ impl DataShredReassembler {
                         .fec_recovered_data_shreds
                         .saturating_sub(recovered_before),
                 );
+                signatures = state.accumulator.yielded_sigs.take();
             }
+        } else if let Some(state) = self.slots.get_mut(&shred.slot()) {
+            signatures = state.accumulator.yielded_sigs.take();
         }
 
         let mut decoded_segments = Vec::new();
@@ -1687,6 +1728,7 @@ impl DataShredReassembler {
             decoded_segments,
             decode_errors,
             fec_recovered_data_shreds: recovered,
+            signatures,
         }
     }
 
@@ -1765,17 +1807,17 @@ struct CompatBatchDecoder {
     expected_count: Option<u64>,
     entries_yielded: u64,
     cursor: usize,
-    yielded_sigs: FxHashSet<[u8; 64]>,
+    yielded_sigs: SignatureTracker,
 }
 
 impl CompatBatchDecoder {
-    fn new() -> Self {
+    fn new(collect_signatures: bool) -> Self {
         Self {
             buffer: Vec::with_capacity(INITIAL_DECODER_BUFFER_CAPACITY),
             expected_count: None,
             entries_yielded: 0,
             cursor: 0,
-            yielded_sigs: FxHashSet::default(),
+            yielded_sigs: SignatureTracker::new(collect_signatures),
         }
     }
 
@@ -1849,10 +1891,10 @@ struct CompatSlotAccumulator {
 }
 
 impl CompatSlotAccumulator {
-    fn new() -> Self {
+    fn new(collect_signatures: bool) -> Self {
         Self {
             pending: BTreeMap::new(),
-            decoder: CompatBatchDecoder::new(),
+            decoder: CompatBatchDecoder::new(collect_signatures),
             next_drain: 0,
             slot_complete: false,
             stall_count: 0,
@@ -1925,6 +1967,7 @@ pub struct ShredstreamCompatReassembler {
     forward_slot_watermark: bool,
     forward_watermark: Option<u64>,
     udp_payload_prefix_skip: usize,
+    collect_signatures: bool,
 }
 
 impl ShredstreamCompatReassembler {
@@ -1933,7 +1976,22 @@ impl ShredstreamCompatReassembler {
         max_slot_age: u64,
         udp_payload_prefix_skip: usize,
     ) -> Self {
+        Self::with_signatures(
+            forward_slot_watermark,
+            max_slot_age,
+            udp_payload_prefix_skip,
+            false,
+        )
+    }
+
+    fn with_signatures(
+        forward_slot_watermark: bool,
+        max_slot_age: u64,
+        udp_payload_prefix_skip: usize,
+        collect_signatures: bool,
+    ) -> Self {
         Self {
+            collect_signatures,
             slots: HashMap::new(),
             max_age: max_slot_age.max(1),
             last_slot: 0,
@@ -1969,7 +2027,7 @@ impl ShredstreamCompatReassembler {
         let acc = self
             .slots
             .entry(shred.slot)
-            .or_insert_with(CompatSlotAccumulator::new);
+            .or_insert_with(|| CompatSlotAccumulator::new(self.collect_signatures));
         let errors_before = acc.decode_errors;
         let counts = acc.push(
             shred.index,
@@ -1979,6 +2037,7 @@ impl ShredstreamCompatReassembler {
         );
         let decode_errors = u64::from(acc.decode_errors.saturating_sub(errors_before));
         let slot_complete = acc.slot_complete;
+        let signatures = acc.decoder.yielded_sigs.take();
         if decode_errors > 0 {
             self.slots.remove(&shred.slot);
         }
@@ -2003,6 +2062,7 @@ impl ShredstreamCompatReassembler {
             decoded_segments,
             decode_errors,
             fec_recovered_data_shreds: 0,
+            signatures,
         }
     }
 

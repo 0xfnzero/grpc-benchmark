@@ -10,3 +10,5 @@ pub use error::{BenchmarkError, Result};
 pub use grpc_client::GrpcClient;
 pub use output::ColoredOutput;
 pub use stats::{calculate_stats, LatencyStats};
+
+pub mod comparison;

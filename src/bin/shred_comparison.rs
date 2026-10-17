@@ -1,240 +1,408 @@
-use chrono::{DateTime, Local};
-use clap::Parser;
-use colored::*;
-use grpc_benchmark::output::ColoredOutput;
-use grpc_benchmark::shred_client::{
-    run_shred_stream, RawShredConfig, ShredDecodeMode, ShredEventKind,
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser};
+use grpc_benchmark::{
+    comparison::{
+        entries::DEFAULT_ENTRIES_METHOD,
+        sources::{SourceConfig, SourceRunStats, Transport},
+        stats::{Comparator, ComparisonConfig, ComparisonSummary},
+        Mode,
+    },
+    shred_client::{RawShredConfig, ShredDecodeMode},
+    BenchmarkError, Result,
 };
-use grpc_benchmark::{BenchmarkError, Result};
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
-use tokio::time::{interval, sleep_until};
+use serde::Serialize;
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+use tokio::{sync::mpsc, task::JoinSet};
 
-#[derive(Debug, Parser)]
-#[command(name = "shred-comparison")]
-#[command(about = "Compare first-slot visibility between two raw Solana shred UDP sources")]
+#[derive(Parser)]
+#[command(
+    about = "Compare two shred sources: slot visibility, identical UDP shreds, or decoded transactions"
+)]
 struct Args {
+    /// Read SHRED_* settings from this file (default: ./shred-comparison.env if present).
+    #[arg(long, env = "SHRED_COMPARISON_CONFIG", hide_env_values = true)]
+    config: Option<PathBuf>,
+    #[arg(
+        long,
+        env = "SHRED_COMPARISON_MODE",
+        value_enum,
+        default_value = "slot"
+    )]
+    mode: Mode,
+    #[arg(long, env = "SHRED_SOURCE_1", value_enum, default_value = "udp")]
+    source_1: Transport,
+    #[arg(long, env = "SHRED_SOURCE_2", value_enum, default_value = "udp")]
+    source_2: Transport,
     #[arg(long, env = "SHRED_BIND_1", default_value = "0.0.0.0:20000")]
     shred_bind_1: String,
-
-    #[arg(long, env = "SHRED_NAME_1", default_value = "Shred_1")]
-    shred_name_1: String,
-
-    #[arg(long, env = "SHRED_DECODE_MODE_1", default_value = "ledger")]
-    shred_decode_mode_1: ShredDecodeMode,
-
-    #[arg(long, env = "SHRED_UDP_PAYLOAD_PREFIX_SKIP_1", default_value_t = 0)]
-    shred_udp_payload_prefix_skip_1: usize,
-
     #[arg(long, env = "SHRED_BIND_2", default_value = "0.0.0.0:20001")]
     shred_bind_2: String,
-
+    #[arg(long, env = "SHRED_NAME_1", default_value = "Shred_1")]
+    shred_name_1: String,
     #[arg(long, env = "SHRED_NAME_2", default_value = "Shred_2")]
     shred_name_2: String,
-
+    #[arg(long, env = "SHRED_URL_1", hide_env_values = true)]
+    shred_url_1: Option<String>,
+    #[arg(long, env = "SHRED_URL_2", hide_env_values = true)]
+    shred_url_2: Option<String>,
+    #[arg(long, env = "SHRED_TOKEN_1", hide_env_values = true)]
+    shred_token_1: Option<String>,
+    #[arg(long, env = "SHRED_TOKEN_2", hide_env_values = true)]
+    shred_token_2: Option<String>,
+    #[arg(long, env = "SHRED_TOKEN_HEADER_1", default_value = "x-token")]
+    shred_token_header_1: String,
+    #[arg(long, env = "SHRED_TOKEN_HEADER_2", default_value = "x-token")]
+    shred_token_header_2: String,
+    #[arg(long, env = "SHRED_ENTRIES_METHOD_1", default_value = DEFAULT_ENTRIES_METHOD)]
+    entries_method_1: String,
+    #[arg(long, env = "SHRED_ENTRIES_METHOD_2", default_value = DEFAULT_ENTRIES_METHOD)]
+    entries_method_2: String,
+    #[arg(long, env = "SHRED_DECODE_MODE_1", default_value = "ledger")]
+    shred_decode_mode_1: ShredDecodeMode,
     #[arg(long, env = "SHRED_DECODE_MODE_2", default_value = "ledger")]
     shred_decode_mode_2: ShredDecodeMode,
-
+    #[arg(long, env = "SHRED_UDP_PAYLOAD_PREFIX_SKIP_1", default_value_t = 0)]
+    shred_udp_payload_prefix_skip_1: usize,
     #[arg(long, env = "SHRED_UDP_PAYLOAD_PREFIX_SKIP_2", default_value_t = 0)]
     shred_udp_payload_prefix_skip_2: usize,
-
-    #[arg(long, env = "SHRED_COMPARISON_DURATION_SEC", default_value_t = 30)]
+    #[arg(long, env = "SHRED_COMPARISON_DURATION_SEC", default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..=86400))]
     duration_sec: u64,
-
+    #[arg(long, env = "SHRED_WARMUP_MS", default_value_t = 1000, value_parser = clap::value_parser!(u64).range(0..=60000))]
+    warmup_ms: u64,
+    #[arg(long, env = "SHRED_SETTLE_WINDOW_MS", default_value_t = 1000, value_parser = clap::value_parser!(u64).range(1..=60000))]
+    settle_window_ms: u64,
     #[arg(long, env = "SHRED_RECV_BUFFER_BYTES", default_value_t = 128 * 1024 * 1024)]
     shred_recv_buffer_bytes: usize,
-
     #[arg(long, env = "SHRED_MAX_TRACKED_SLOTS", default_value_t = 128)]
     shred_max_tracked_slots: usize,
-
     #[arg(long, env = "SHRED_REASSEMBLY_GAP_TIMEOUT_MS", default_value_t = 500)]
     shred_reassembly_gap_timeout_ms: u64,
+    /// Retain settled IDs for this many slots to deduplicate retransmits.
+    #[arg(long, env = "SHRED_RETENTION_SLOTS", default_value_t = 128)]
+    retention_slots: u64,
+    #[arg(long, env = "SHRED_MAX_KEYS", default_value_t = 1_000_000)]
+    max_keys: usize,
+    #[arg(long, env = "SHRED_MAX_SAMPLES", default_value_t = 5_000_000)]
+    max_samples: usize,
+    /// Write a machine-readable report; endpoints and authentication values are omitted.
+    #[arg(long, env = "SHRED_JSON_OUTPUT")]
+    json_output: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone)]
-struct SlotUpdate {
-    endpoint: String,
-    slot: u64,
-    received_at: Instant,
-}
-
-#[derive(Debug, Clone)]
-struct BlockData {
-    endpoint: String,
-    timestamp: Instant,
-}
-
-#[derive(Debug)]
-struct EndpointStats {
-    latencies: Vec<f64>,
-    first_received: u64,
-    total_received: u64,
-    first_slot: Option<u64>,
-    has_received_data: bool,
-}
-
-impl EndpointStats {
-    fn new() -> Self {
-        Self {
-            latencies: Vec::new(),
-            first_received: 0,
-            total_received: 0,
-            first_slot: None,
-            has_received_data: false,
-        }
-    }
-}
-
-fn log_info(message: &str) {
-    let now: DateTime<Local> = Local::now();
-    println!(
-        "{} {}",
-        format!("[{}]", now.format("%H:%M:%S%.3f")).white(),
-        message
-    );
-}
-
-async fn run_shred_slot_stream(
-    endpoint_name: String,
-    config: RawShredConfig,
-    duration: Duration,
-    slot_tx: mpsc::Sender<SlotUpdate>,
-) -> Result<()> {
-    log_info(&format!(
-        "监听 Shred UDP: {} -> {} ({})",
-        endpoint_name, config.bind_addr, config.decode_mode
-    ));
-
-    let (event_tx, mut event_rx) = mpsc::channel(8192);
-    let listener = tokio::spawn(run_shred_stream(config, duration, event_tx));
-
-    while let Some(event) = event_rx.recv().await {
-        if matches!(event.kind, ShredEventKind::FirstShred { .. }) {
-            let _ = slot_tx
-                .send(SlotUpdate {
-                    endpoint: endpoint_name.clone(),
-                    slot: event.slot,
-                    received_at: event.received_at,
+impl Args {
+    fn load() -> Result<Self> {
+        let argv: Vec<_> = std::env::args_os().collect();
+        let command = Self::command();
+        // Parse first so --help/--version and CLI errors never require a config file.
+        let matches = command.clone().get_matches_from(&argv);
+        let explicit = matches.get_one::<PathBuf>("config");
+        let default = PathBuf::from("shred-comparison.env");
+        let path = match explicit {
+            Some(path) => path,
+            None if default.exists() => &default,
+            None => return Ok(Self::from_arg_matches(&matches).expect("validated CLI")),
+        };
+        let settings = dotenvy::from_path_iter(path).map_err(|_| {
+            BenchmarkError::ConfigError("cannot read shred comparison config file".into())
+        })?;
+        let mut merged = argv.clone();
+        let mut seen = std::collections::HashSet::new();
+        for setting in settings {
+            // Never include parser errors: they can contain authentication values.
+            let (key, value) = setting.map_err(|_| {
+                BenchmarkError::ConfigError(
+                    "invalid dotenv syntax in shred comparison config".into(),
+                )
+            })?;
+            let arg = command
+                .get_arguments()
+                .find(|arg| {
+                    arg.get_id() != "config" && arg.get_env() == Some(std::ffi::OsStr::new(&key))
                 })
-                .await;
+                .ok_or_else(|| {
+                    BenchmarkError::ConfigError(
+                        "unknown setting in shred comparison config; use the supplied templates"
+                            .into(),
+                    )
+                })?;
+            if !seen.insert(key) {
+                return Err(BenchmarkError::ConfigError(
+                    "duplicate setting in shred comparison config".into(),
+                ));
+            }
+            if matches.value_source(arg.get_id().as_str()).is_none()
+                || matches.value_source(arg.get_id().as_str()) == Some(ValueSource::DefaultValue)
+            {
+                merged.push(
+                    format!("--{}={value}", arg.get_long().expect("long config option")).into(),
+                );
+            }
         }
+        let merged = command.try_get_matches_from(merged).map_err(|_| {
+            BenchmarkError::ConfigError(
+                "invalid setting value in shred comparison config; check types and ranges".into(),
+            )
+        })?;
+        Ok(Self::from_arg_matches(&merged).expect("validated config"))
     }
 
-    let stats = listener
-        .await
-        .map_err(|e| BenchmarkError::ConfigError(e.to_string()))??;
-    log_info(&format!(
-        "{endpoint_name} UDP完成: datagrams={}, valid_shreds={}, unique_slots={}, parse_errors={}",
-        stats.datagrams_received, stats.valid_shreds, stats.unique_slots, stats.parse_errors
-    ));
-
-    Ok(())
-}
-
-fn process_slot_if_ready(
-    slot: u64,
-    endpoint_names: &[String],
-    block_data_by_slot: &HashMap<u64, Vec<BlockData>>,
-    processed_slots: &mut HashSet<u64>,
-    endpoint_stats: &mut HashMap<String, EndpointStats>,
-) {
-    if processed_slots.contains(&slot) {
-        return;
-    }
-
-    let Some(block_data_list) = block_data_by_slot.get(&slot) else {
-        return;
-    };
-    let received_endpoints: HashSet<_> = block_data_list
-        .iter()
-        .map(|block| block.endpoint.as_str())
-        .collect();
-    if !endpoint_names
-        .iter()
-        .all(|endpoint| received_endpoints.contains(endpoint.as_str()))
-    {
-        return;
-    }
-
-    processed_slots.insert(slot);
-
-    for endpoint in endpoint_names {
-        if let Some(stats) = endpoint_stats.get_mut(endpoint) {
-            stats.total_received += 1;
-        }
-    }
-
-    let mut sorted = block_data_list.clone();
-    sorted.sort_by(|a, b| {
-        a.timestamp
-            .cmp(&b.timestamp)
-            .then_with(|| a.endpoint.cmp(&b.endpoint))
-    });
-    let first = sorted.first().unwrap().clone();
-
-    if let Some(stats) = endpoint_stats.get_mut(&first.endpoint) {
-        stats.first_received += 1;
-    }
-    log_info(&format!(
-        "{:width$} 接收 slot {}: 首次接收",
-        first.endpoint,
-        slot,
-        width = max_endpoint_name_len(endpoint_names)
-    ));
-
-    for block in sorted.iter().skip(1) {
-        let latency_ms =
-            block.timestamp.duration_since(first.timestamp).as_nanos() as f64 / 1_000_000.0;
-        if let Some(stats) = endpoint_stats.get_mut(&block.endpoint) {
-            stats.latencies.push(latency_ms);
-        }
-        log_info(&format!(
-            "{:width$} 接收 slot {}: 延迟 {:>6.2}ms (相对于 {})",
-            block.endpoint,
-            slot,
-            latency_ms,
-            first.endpoint,
-            width = max_endpoint_name_len(endpoint_names)
-        ));
-    }
-}
-
-fn max_endpoint_name_len(endpoint_names: &[String]) -> usize {
-    endpoint_names
-        .iter()
-        .map(|name| name.len())
-        .max()
-        .unwrap_or(8)
-}
-
-fn prune_old_slots(
-    min_keep_slot: u64,
-    dedup: &mut HashMap<String, HashSet<u64>>,
-    block_data_by_slot: &mut HashMap<u64, Vec<BlockData>>,
-    processed_slots: &mut HashSet<u64>,
-) {
-    block_data_by_slot.retain(|slot, _| *slot >= min_keep_slot);
-    processed_slots.retain(|slot| *slot >= min_keep_slot);
-    for slots in dedup.values_mut() {
-        slots.retain(|slot| *slot >= min_keep_slot);
-    }
-}
-
-fn ensure_unique_endpoint_names(endpoint_names: &[String]) -> Result<()> {
-    let mut seen = HashSet::new();
-    for name in endpoint_names {
-        let trimmed = name.trim();
-        if trimmed.is_empty() {
+    fn validate(&self) -> Result<()> {
+        if self.shred_name_1.trim().is_empty()
+            || self.shred_name_2.trim().is_empty()
+            || self.shred_name_1.trim() == self.shred_name_2.trim()
+        {
             return Err(BenchmarkError::ConfigError(
-                "endpoint names must not be empty".to_string(),
+                "source names must be nonempty and distinct".into(),
             ));
         }
-        if !seen.insert(trimmed.to_string()) {
-            return Err(BenchmarkError::ConfigError(format!(
-                "duplicate endpoint name: {trimmed}"
-            )));
+        if self.max_keys == 0
+            || self.max_samples == 0
+            || self.retention_slots == 0
+            || self.shred_max_tracked_slots == 0
+        {
+            return Err(BenchmarkError::ConfigError(
+                "capacity and retention settings must be positive".into(),
+            ));
         }
+        if self.mode == Mode::Shred
+            && (self.source_1 != Transport::Udp || self.source_2 != Transport::Udp)
+        {
+            return Err(BenchmarkError::ConfigError("--mode shred requires two UDP sources; use --mode transaction for Entry or mixed feeds".into()));
+        }
+        if self.source_1 == Transport::Udp && self.source_2 == Transport::Udp {
+            let a: std::net::SocketAddr = self
+                .shred_bind_1
+                .parse()
+                .map_err(|_| BenchmarkError::ConfigError("invalid --shred-bind-1".into()))?;
+            let b: std::net::SocketAddr = self
+                .shred_bind_2
+                .parse()
+                .map_err(|_| BenchmarkError::ConfigError("invalid --shred-bind-2".into()))?;
+            if a.port() == b.port()
+                && (a.ip() == b.ip() || a.ip().is_unspecified() || b.ip().is_unspecified())
+            {
+                return Err(BenchmarkError::ConfigError(
+                    "two UDP sources must bind distinct addresses/ports".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn sources(&self) -> [SourceConfig; 2] {
+        let udp = |bind_addr, decode_mode, udp_payload_prefix_skip| RawShredConfig {
+            bind_addr,
+            decode_mode,
+            udp_payload_prefix_skip,
+            recv_buffer_bytes: self.shred_recv_buffer_bytes,
+            max_tracked_slots: self.shred_max_tracked_slots,
+            reassembly_gap_timeout_ms: self.shred_reassembly_gap_timeout_ms,
+            ..Default::default()
+        };
+        [
+            SourceConfig {
+                transport: self.source_1,
+                udp: udp(
+                    self.shred_bind_1.clone(),
+                    self.shred_decode_mode_1,
+                    self.shred_udp_payload_prefix_skip_1,
+                ),
+                url: self.shred_url_1.clone(),
+                method: self.entries_method_1.clone(),
+                token: self.shred_token_1.clone(),
+                token_header: self.shred_token_header_1.clone(),
+            },
+            SourceConfig {
+                transport: self.source_2,
+                udp: udp(
+                    self.shred_bind_2.clone(),
+                    self.shred_decode_mode_2,
+                    self.shred_udp_payload_prefix_skip_2,
+                ),
+                url: self.shred_url_2.clone(),
+                method: self.entries_method_2.clone(),
+                token: self.shred_token_2.clone(),
+                token_header: self.shred_token_header_2.clone(),
+            },
+        ]
+    }
+}
+
+#[derive(Serialize)]
+struct Report {
+    schema_version: u32,
+    valid: bool,
+    invalid_reasons: Vec<String>,
+    duration_sec: u64,
+    warmup_ms: u64,
+    transports: [Transport; 2],
+    comparison: ComparisonSummary,
+    receive: [SourceRunStats; 2],
+    settings: serde_json::Value,
+}
+
+async fn run(args: Args) -> Result<()> {
+    args.validate()?;
+    let [config_a, config_b] = args.sources();
+    println!(
+        "Preparing sources ({:?}, {:?}); mode={:?}",
+        args.source_1, args.source_2, args.mode
+    );
+    let (a, b) = tokio::time::timeout(Duration::from_secs(15), async {
+        tokio::try_join!(config_a.prepare(args.mode), config_b.prepare(args.mode))
+    })
+    .await
+    .map_err(|_| BenchmarkError::Timeout)??;
+    let start = Instant::now() + Duration::from_millis(args.warmup_ms);
+    let duration = Duration::from_secs(args.duration_sec);
+    let settle = Duration::from_millis(args.settle_window_ms);
+    let stop_at = start + duration + settle;
+    let names = [args.shred_name_1.clone(), args.shred_name_2.clone()];
+    let mut comparator = Comparator::new(
+        ComparisonConfig {
+            mode: args.mode,
+            duration,
+            settle,
+            max_keys: args.max_keys,
+            max_samples: args.max_samples,
+            retention_slots: args.retention_slots,
+        },
+        names.clone(),
+        start,
+    );
+    let (tx, mut rx) = mpsc::channel(65536);
+    let mut tasks = JoinSet::new();
+    for (i, source) in [a, b].into_iter().enumerate() {
+        let tx = tx.clone();
+        let mode = args.mode;
+        tasks.spawn(async move {
+            source
+                .run(i, mode, stop_at, tx)
+                .await
+                .map(|stats| (i, stats))
+        });
+    }
+    drop(tx);
+    let mut stats = [SourceRunStats::default(), SourceRunStats::default()];
+    let mut closed = false;
+    let mut tick = tokio::time::interval(Duration::from_millis(100));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    println!(
+        "Both sources ready. Warmup={}ms, measurement={}s, counterpart wait={}ms",
+        args.warmup_ms, args.duration_sec, args.settle_window_ms
+    );
+    let mut last_progress = Instant::now();
+    while !closed || !tasks.is_empty() {
+        tokio::select! {
+            result = tasks.join_next(), if !tasks.is_empty() => {
+                let (i, result) = result.expect("nonempty task set")
+                    .map_err(|_| BenchmarkError::ConfigError("source task failed".into()))??;
+                stats[i] = result;
+            }
+            event = rx.recv(), if !closed => {
+                match event { Some(event) => comparator.record(event)?, None => closed = true }
+            }
+            _ = tick.tick() => {
+                if rx.is_empty() { comparator.settle(Instant::now(), false)?; }
+                if last_progress.elapsed() >= Duration::from_secs(5) {
+                    let (matched, pending) = comparator.progress();
+                    let elapsed = Instant::now().saturating_duration_since(start).as_secs();
+                    println!("Progress: {}/{}s matched={} pending={}", elapsed.min(args.duration_sec), args.duration_sec, matched, pending);
+                    last_progress = Instant::now();
+                }
+            },
+        }
+    }
+    let summary = comparator.summary()?;
+    let mut invalid_reasons = Vec::new();
+    if summary.matched == 0 {
+        invalid_reasons.push("no matched samples".to_string());
+    }
+    for (i, (receive, transport)) in stats.iter().zip([args.source_1, args.source_2]).enumerate() {
+        if receive.queue_dropped > 0 {
+            invalid_reasons.push(format!("source {} observation queue overflow", i + 1));
+        }
+        if transport == Transport::EntriesGrpc && receive.invalid > 0 {
+            invalid_reasons.push(format!("source {} Entry payload decode failures; verify provider format/transaction version", i + 1));
+        }
+    }
+    let valid = invalid_reasons.is_empty();
+    println!(
+        "\nMatched={} Ties={} (wins use matched samples only)",
+        summary.matched, summary.ties
+    );
+    for source in &summary.sources {
+        let percent = if summary.matched > 0 {
+            source.wins as f64 * 100.0 / summary.matched as f64
+        } else {
+            0.0
+        };
+        println!(
+            "{}: unique={} wins={} ({:.2}%) only={} duplicates={} late={}",
+            source.name,
+            source.unique,
+            source.wins,
+            percent,
+            source.only,
+            source.duplicates,
+            source.late
+        );
+    }
+    if let Some(diff) = &summary.b_minus_a_us {
+        println!(
+            "B-A (us; positive=A earlier): mean={:.2} p50={:.2} p95={:.2} p99={:.2}",
+            diff.mean, diff.p50, diff.p95, diff.p99
+        );
+    }
+    if let Some(gap) = &summary.loser_gap_us {
+        println!(
+            "Absolute gap (us): p50={:.2} p95={:.2} p99={:.2}",
+            gap.p50, gap.p95, gap.p99
+        );
+    }
+    for (i, receive) in stats.iter().enumerate() {
+        println!(
+            "{}: messages={} invalid={} decode_errors={} queue_dropped={} fec_recovered={}",
+            names[i],
+            receive.packets_or_messages,
+            receive.invalid,
+            receive.decode_errors,
+            receive.queue_dropped,
+            receive.fec_recovered
+        );
+    }
+    for reason in &invalid_reasons {
+        eprintln!("Invalid benchmark: {reason}");
+    }
+    if let Some(path) = &args.json_output {
+        let report = Report {
+            schema_version: 1,
+            valid,
+            invalid_reasons,
+            duration_sec: args.duration_sec,
+            warmup_ms: args.warmup_ms,
+            transports: [args.source_1, args.source_2],
+            comparison: summary,
+            receive: stats,
+            settings: serde_json::json!({
+                "retention_slots": args.retention_slots,
+                "max_keys": args.max_keys,
+                "max_samples": args.max_samples,
+                "udp_receive_buffer_requested_bytes": args.shred_recv_buffer_bytes,
+                "decode_modes": [args.shred_decode_mode_1.to_string(), args.shred_decode_mode_2.to_string()],
+                "udp_prefix_skip_bytes": [args.shred_udp_payload_prefix_skip_1, args.shred_udp_payload_prefix_skip_2],
+                "decoder_max_tracked_slots": args.shred_max_tracked_slots,
+                "decoder_gap_timeout_ms": args.shred_reassembly_gap_timeout_ms,
+            }),
+        };
+        std::fs::write(path, serde_json::to_vec_pretty(&report)?)?;
+    }
+    if !valid {
+        return Err(BenchmarkError::ConfigError(
+            "invalid benchmark: inspect reported reasons, source counters and formats".into(),
+        ));
     }
     Ok(())
 }
@@ -242,194 +410,5 @@ fn ensure_unique_endpoint_names(endpoint_names: &[String]) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = dotenvy::dotenv();
-    let args = Args::parse();
-    let duration = Duration::from_secs(args.duration_sec);
-    let endpoint_names = vec![args.shred_name_1.clone(), args.shred_name_2.clone()];
-    ensure_unique_endpoint_names(&endpoint_names)?;
-
-    println!(
-        "{}",
-        "🚀 Solana Shred vs Shred Benchmark Tool"
-            .bright_green()
-            .bold()
-    );
-    println!(
-        "{}",
-        "========================================".bright_green()
-    );
-    println!("Shred 1: {} - {}", args.shred_name_1, args.shred_bind_1);
-    println!("Shred 2: {} - {}", args.shred_name_2, args.shred_bind_2);
-    println!("Duration: {}s", args.duration_sec);
-    println!("{}", "Header-only fast path: true".dimmed());
-    println!(
-        "{}",
-        "────────────────────────────────────────────────────────────────".dimmed()
-    );
-
-    let config_1 = RawShredConfig {
-        bind_addr: args.shred_bind_1,
-        recv_buffer_bytes: args.shred_recv_buffer_bytes,
-        decode_mode: args.shred_decode_mode_1,
-        decode_entries: false,
-        udp_payload_prefix_skip: args.shred_udp_payload_prefix_skip_1,
-        max_tracked_slots: args.shred_max_tracked_slots,
-        reassembly_gap_timeout_ms: args.shred_reassembly_gap_timeout_ms,
-        ..RawShredConfig::default()
-    };
-    let config_2 = RawShredConfig {
-        bind_addr: args.shred_bind_2,
-        recv_buffer_bytes: args.shred_recv_buffer_bytes,
-        decode_mode: args.shred_decode_mode_2,
-        decode_entries: false,
-        udp_payload_prefix_skip: args.shred_udp_payload_prefix_skip_2,
-        max_tracked_slots: args.shred_max_tracked_slots,
-        reassembly_gap_timeout_ms: args.shred_reassembly_gap_timeout_ms,
-        ..RawShredConfig::default()
-    };
-
-    let (slot_tx, mut slot_rx) = mpsc::channel(8192);
-    let shred_1_handle = tokio::spawn(run_shred_slot_stream(
-        args.shred_name_1.clone(),
-        config_1,
-        duration,
-        slot_tx.clone(),
-    ));
-    let shred_2_handle = tokio::spawn(run_shred_slot_stream(
-        args.shred_name_2.clone(),
-        config_2,
-        duration,
-        slot_tx.clone(),
-    ));
-    drop(slot_tx);
-
-    let mut endpoint_stats: HashMap<String, EndpointStats> = endpoint_names
-        .iter()
-        .map(|name| (name.clone(), EndpointStats::new()))
-        .collect();
-    let mut first_seen = HashSet::<String>::new();
-    let mut dedup = HashMap::<String, HashSet<u64>>::new();
-    let mut block_data_by_slot = HashMap::<u64, Vec<BlockData>>::new();
-    let mut processed_slots = HashSet::<u64>::new();
-    let mut started_stats = false;
-    let started_at = Instant::now();
-    let mut progress = interval(Duration::from_secs(5));
-    let deadline = tokio::time::Instant::now() + duration + Duration::from_secs(1);
-    let mut stop = Box::pin(sleep_until(deadline));
-
-    loop {
-        tokio::select! {
-            _ = &mut stop => break,
-            update = slot_rx.recv() => {
-                let Some(update) = update else {
-                    break;
-                };
-
-                let endpoint_slots = dedup.entry(update.endpoint.clone()).or_default();
-                if !endpoint_slots.insert(update.slot) {
-                    continue;
-                }
-
-                block_data_by_slot
-                    .entry(update.slot)
-                    .or_default()
-                    .push(BlockData {
-                        endpoint: update.endpoint.clone(),
-                        timestamp: update.received_at,
-                    });
-
-                if first_seen.insert(update.endpoint.clone()) {
-                    if let Some(stats) = endpoint_stats.get_mut(&update.endpoint) {
-                        stats.has_received_data = true;
-                        stats.first_slot = Some(update.slot);
-                    }
-                    log_info(&format!(
-                        "{} 成功接收到第一个 slot {}, 确认为可用端点",
-                        update.endpoint, update.slot
-                    ));
-                }
-
-                if !started_stats && first_seen.len() >= 2 {
-                    started_stats = true;
-                    log_info("两个 Shred 源都已收到 slot，开始正式统计...");
-                }
-
-                if started_stats {
-                    process_slot_if_ready(
-                        update.slot,
-                        &endpoint_names,
-                        &block_data_by_slot,
-                        &mut processed_slots,
-                        &mut endpoint_stats,
-                    );
-                }
-
-                let min_keep_slot = update.slot.saturating_sub(200);
-                prune_old_slots(
-                    min_keep_slot,
-                    &mut dedup,
-                    &mut block_data_by_slot,
-                    &mut processed_slots,
-                );
-            }
-            _ = progress.tick() => {
-                let elapsed = started_at.elapsed().as_secs();
-                let remaining = args.duration_sec.saturating_sub(elapsed);
-                log_info(&format!(
-                    "===== 测试进度: {}/{}秒 - 剩余: {}秒 - 已对比slot: {} =====",
-                    elapsed.min(args.duration_sec),
-                    args.duration_sec,
-                    remaining,
-                    processed_slots.len()
-                ));
-            }
-        }
-    }
-
-    for handle in [shred_1_handle, shred_2_handle] {
-        match handle.await {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => log_info(&format!("任务结束时出错: {e}")),
-            Err(e) => log_info(&format!("任务 join 失败: {e}")),
-        }
-    }
-
-    let output = ColoredOutput::new();
-    output.separator();
-    output.success("测试完成，正在分析结果...");
-
-    for endpoint in &endpoint_names {
-        let stats = endpoint_stats
-            .get(endpoint)
-            .expect("endpoint stats should exist");
-        let behind_count = stats.total_received.saturating_sub(stats.first_received);
-        let first_percentage = if stats.total_received > 0 {
-            (stats.first_received as f64 / stats.total_received as f64) * 100.0
-        } else {
-            0.0
-        };
-        let avg_latency = if stats.latencies.is_empty() {
-            0.0
-        } else {
-            stats.latencies.iter().sum::<f64>() / stats.latencies.len() as f64
-        };
-
-        output.subheader(&format!("📊 {} 性能分析", endpoint));
-        output.metric("总对齐 slot 数", &stats.total_received.to_string(), "slots");
-        output.metric(
-            "首先接收 slot 数",
-            &format!("{} ({:.2}%)", stats.first_received, first_percentage),
-            "slots",
-        );
-        output.metric("落后接收 slot 数", &behind_count.to_string(), "slots");
-        if stats.latencies.is_empty() && stats.first_received > 0 {
-            output.success("该 Shred 源没有落后样本");
-        } else {
-            output.metric("落后时平均延迟", &format!("{avg_latency:.2}"), "ms");
-        }
-    }
-
-    output.separator();
-    output.success("✓ 测试结束");
-
-    Ok(())
+    run(Args::load()?).await
 }

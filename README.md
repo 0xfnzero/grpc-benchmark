@@ -22,14 +22,14 @@ Comparison benchmarks are listed first because they are the main latency-compari
 | Binary | Script | Measures |
 |--------|--------|----------|
 | `grpc-comparison` | `run-grpc-comparison.sh` | First-slot order and latency across Yellowstone gRPC endpoints |
-| `shred-comparison` | `run-shred-comparison.sh` | First-slot latency between two raw shred UDP sources |
+| `shred-comparison` | `run-shred-comparison.sh` | Slot, identical shred, or transaction arrival; UDP / Entry gRPC / mixed sources |
 | `grpc-vs-shred` | `run-grpc-vs-shred.sh` | First-slot latency between Yellowstone gRPC and raw shred |
 | `latency-test` | `run-latency-test.sh` | Single gRPC endpoint ping/subscription latency |
 | `shred` | `run-shred.sh` | Raw shred UDP listener with first-slot and decoded-segment logs |
 | `shred-benchmark` | `run-shred-benchmark.sh` | Raw shred UDP throughput and Entry/transaction decode stats |
 | `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine HTTP request performance |
 
-The old private stream entrypoint has been removed. Raw shred decoding does not depend on Jito ShredStream services. The default `ledger` mode parses Solana wire headers directly, streams contiguous data shred batches into `bincode Vec<Entry>`, and can use Merkle Reed-Solomon FEC to recover missing data shreds. `shred-comparison` and `grpc-vs-shred` disable Entry decoding by default and use first valid shred header arrival for lowest-latency slot comparison.
+The old private stream entrypoint has been removed. Raw shred decoding does not depend on Jito ShredStream services. The default `ledger` mode parses Solana wire headers directly, streams contiguous data shred batches into `bincode Vec<Entry>`, and can use Merkle Reed-Solomon FEC to recover missing data shreds. `shred-comparison` supports `slot`, `shred`, and `transaction` modes with UDP and provider-hosted Entry gRPC adapters; only transaction mode decodes UDP Entries. `grpc-vs-shred` retains first-slot header comparison.
 
 ## Install
 
@@ -45,7 +45,7 @@ cd "$HOME/grpc-benchmark"
 Install a specific release tag or directory:
 
 ```bash
-VERSION=v1.4 ./install.sh
+VERSION=v1.5 ./install.sh
 INSTALL_DIR=/opt/grpc-benchmark sudo -E ./install.sh
 ```
 
@@ -54,7 +54,7 @@ If `INSTALL_DIR` already exists and was not created by this installer, the insta
 If you need to force a platform asset:
 
 ```bash
-TARGET=x86_64-unknown-linux-gnu VERSION=v1.4 ./install.sh
+TARGET=x86_64-unknown-linux-gnu VERSION=v1.5 ./install.sh
 ```
 
 ## Comparison Benchmarks
@@ -78,20 +78,58 @@ export GRPC_COMPARISON_DURATION_SEC=30
 
 ### Shred vs Shred
 
-Forward two raw shred sources to two local UDP ports:
+Choose the metric independently of each source's transport:
+
+| Mode | Matching key | Inputs |
+| --- | --- | --- |
+| `slot` (compatible default) | Slot first visibility | UDP / Entry gRPC / mixed |
+| `shred` | Same slot + index + data/code type | UDP vs UDP |
+| `transaction` | Same slot + first transaction signature | UDP / Entry gRPC / mixed |
+
+Use a configuration file to avoid entering benchmark flags each time. Copy a template,
+edit provider names, UDP bind addresses or Entry endpoints/authentication, then run:
 
 ```bash
-export SHRED_BIND_1="0.0.0.0:20000"
-export SHRED_NAME_1="Shred_A"
-export SHRED_DECODE_MODE_1="ledger"
-
-export SHRED_BIND_2="0.0.0.0:20001"
-export SHRED_NAME_2="Shred_B"
-export SHRED_DECODE_MODE_2="ledger"
-
-export SHRED_COMPARISON_DURATION_SEC=30
+cp configs/shred-udp-shred.env.example shred-comparison.env
+# Edit shred-comparison.env
 ./run-shred-comparison.sh
 ```
+
+| Scenario | Configuration template |
+| --- | --- |
+| UDP vs UDP: identical shreds | [shred-udp-shred.env.example](configs/shred-udp-shred.env.example) |
+| UDP vs UDP: decoded transactions | [shred-udp-transaction.env.example](configs/shred-udp-transaction.env.example) |
+| Entry gRPC vs Entry gRPC | [shred-entries-transaction.env.example](configs/shred-entries-transaction.env.example) |
+| UDP vs Entry gRPC | [shred-mixed-transaction.env.example](configs/shred-mixed-transaction.env.example) |
+| First slot visibility | [shred-slot.env.example](configs/shred-slot.env.example) |
+
+The binary reads `shred-comparison.env` from the working directory by default; launchers
+first change to their own directory. Select another file with `--config PATH` or
+`SHRED_COMPARISON_CONFIG`. Precedence: **CLI > environment (including `.env`) > comparison
+config file > built-in defaults**. A missing default file preserves the previous behavior;
+an explicitly missing file, unknown key or invalid value fails. Files are parsed as dotenv,
+never executed as shell scripts. Keep personal credentials out of Git (the default filename is ignored).
+UDP providers must push to separate ports on this host; Entry providers must support the documented protocol.
+
+CLI flags remain available, including temporary overrides:
+
+```bash
+./run-shred-comparison.sh --duration-sec 120
+./run-shred-comparison.sh --config configs/shred-mixed-transaction.env.example
+```
+
+Replace placeholder endpoints before the second command, or copy the template to a personal file first.
+The source launcher builds with Cargo; downloaded bundles run the binary directly with the same configuration.
+
+Reports include matched and single-sided samples, duplicates, late arrivals, wins/ties,
+signed B−A differences and P50/P95/P99 gaps. No matched samples, Entry decode failures or local queue overflow
+returns an error. Both sources prepare before a shared warmup and measurement window.
+
+See the [complete setup guide](docs/shred-comparison.md) for all five combinations,
+authentication, custom RPC paths, timing semantics, resource limits, and format compatibility.
+No Jito proxy process or Jito subscription is required.
+
+The installer preserves `.env` and `shred-comparison.env` when upgrading a managed installation.
 
 ### gRPC vs Shred
 
@@ -180,7 +218,7 @@ export SHRED_MAX_FEC_SETS_PER_SLOT=32
 Build the host platform package:
 
 ```bash
-VERSION=v1.4 ./compile.sh
+VERSION=v1.5 ./compile.sh
 ```
 
 Build multiple macOS/Linux packages when the required Rust targets and linkers are available:
@@ -188,7 +226,7 @@ Build multiple macOS/Linux packages when the required Rust targets and linkers a
 ```bash
 rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
 
-VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.5 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 ```
 
 Release assets are generated under `release/`:
@@ -207,8 +245,8 @@ SHA256SUMS
 Recommended release flow: push a `v*` tag. GitHub Actions builds and uploads all macOS/Linux binary packages automatically:
 
 ```bash
-git tag v1.4
-git push origin v1.4
+git tag v1.5
+git push origin v1.5
 ```
 
 The release workflow publishes:
@@ -225,15 +263,15 @@ SHA256SUMS
 Manual fallback:
 
 ```bash
-VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.5 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 
-git tag v1.4
-git push origin v1.4
+git tag v1.5
+git push origin v1.5
 
-gh release create v1.4 \
+gh release create v1.5 \
   release/install.sh \
   release/grpc-benchmark-*.tar.gz \
   release/SHA256SUMS \
-  --title "v1.4" \
+  --title "v1.5" \
   --notes "gRPC/Shred comparison benchmarks and raw shred decoding updates"
 ```

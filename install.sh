@@ -92,6 +92,16 @@ install_package() {
   rm -rf "$tmp_install"
   cp -R "$package_dir" "$tmp_install"
 
+  # Preserve personal credentials/settings when replacing a managed installation.
+  if [[ -f "$INSTALL_DIR/$INSTALL_MARKER" ]]; then
+    local config_file
+    for config_file in .env shred-comparison.env; do
+      if [[ -f "$INSTALL_DIR/$config_file" ]]; then
+        cp -p "$INSTALL_DIR/$config_file" "$tmp_install/$config_file"
+      fi
+    done
+  fi
+
   if [[ -e "$INSTALL_DIR" ]]; then
     backup="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
     mv "$INSTALL_DIR" "$backup"

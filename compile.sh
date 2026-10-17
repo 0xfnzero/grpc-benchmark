@@ -46,24 +46,10 @@ EOF
 
   cat > "$dir/run-shred-comparison.sh" << 'EOF'
 #!/bin/bash
-
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-
-export SHRED_BIND_1="${SHRED_BIND_1:-0.0.0.0:20000}"
-export SHRED_NAME_1="${SHRED_NAME_1:-Shred_1}"
-export SHRED_DECODE_MODE_1="${SHRED_DECODE_MODE_1:-ledger}"
-export SHRED_UDP_PAYLOAD_PREFIX_SKIP_1="${SHRED_UDP_PAYLOAD_PREFIX_SKIP_1:-0}"
-
-export SHRED_BIND_2="${SHRED_BIND_2:-0.0.0.0:20001}"
-export SHRED_NAME_2="${SHRED_NAME_2:-Shred_2}"
-export SHRED_DECODE_MODE_2="${SHRED_DECODE_MODE_2:-ledger}"
-export SHRED_UDP_PAYLOAD_PREFIX_SKIP_2="${SHRED_UDP_PAYLOAD_PREFIX_SKIP_2:-0}"
-
-export SHRED_RECV_BUFFER_BYTES="${SHRED_RECV_BUFFER_BYTES:-134217728}"
-export SHRED_COMPARISON_DURATION_SEC="${SHRED_COMPARISON_DURATION_SEC:-30}"
-
-./shred-comparison
+exec "$SCRIPT_DIR/shred-comparison" "$@"
 EOF
 
   cat > "$dir/run-grpc-vs-shred.sh" << 'EOF'
@@ -194,6 +180,7 @@ build_target() {
 
   generate_run_scripts "$package_dir"
   cp README.md README_CN.md LICENSE "$package_dir/"
+  cp -R configs docs "$package_dir/"
   touch "$package_dir/.grpc-benchmark-install"
 
   tar -C "$staging_root" -czf "$archive" grpc-benchmark
