@@ -1,8 +1,31 @@
-# Solana Yellowstone gRPC / Raw Shred Benchmark
+<div align="center">
+    <h1>Solana Yellowstone gRPC / Raw Shred Benchmark</h1>
+    <h3><em>Compare Solana gRPC and raw Shred latency</em></h3>
+</div>
 
-[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
+<p align="center">
+    <strong>High-performance Rust CLI for Solana latency benchmarking: Yellowstone gRPC vs gRPC, raw shred vs raw shred, and gRPC vs raw shred. It measures first-slot arrival latency, UDP shred throughput, Entry/transaction decode stats, and Jito Block Engine HTTP performance on macOS and Linux.</strong>
+</p>
 
-High-performance Rust CLI for Solana latency benchmarking: Yellowstone gRPC vs gRPC, raw shred vs raw shred, and gRPC vs raw shred. It measures first-slot arrival latency, UDP shred throughput, Entry/transaction decode stats, and Jito Block Engine HTTP performance on macOS and Linux.
+<p align="center">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+    <a href="https://github.com/0xfnzero/grpc-benchmark"><img src="https://img.shields.io/github/stars/0xfnzero/grpc-benchmark?style=social" alt="GitHub stars"></a>
+    <a href="https://github.com/0xfnzero/grpc-benchmark/network"><img src="https://img.shields.io/github/forks/0xfnzero/grpc-benchmark?style=social" alt="GitHub forks"></a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&amp;logo=rust&amp;logoColor=white" alt="Rust">
+    <img src="https://img.shields.io/badge/Solana-9945FF?style=for-the-badge&amp;logo=solana&amp;logoColor=white" alt="Solana">
+    <img src="https://img.shields.io/badge/gRPC-4285F4?style=for-the-badge&amp;logo=grpc&amp;logoColor=white" alt="gRPC">
+</p>
+
+<p align="center">
+    <a href="https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md">中文</a> |
+    <a href="https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md">English</a> |
+    <a href="https://fnzero.dev/">Website</a> |
+    <a href="https://t.me/fnzero_group">Telegram</a> |
+    <a href="https://discord.gg/vuazbGkqQE">Discord</a>
+</p>
 
 **Keywords:** Solana benchmark, Yellowstone gRPC, Geyser gRPC, raw shred, ShredStream, shred latency, gRPC latency, validator infrastructure, Jito Block Engine.
 

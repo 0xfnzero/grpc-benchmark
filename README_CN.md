@@ -1,8 +1,31 @@
-# Solana Yellowstone gRPC / Raw Shred 基准测试工具
+<div align="center">
+    <h1>Solana Yellowstone gRPC / Raw Shred 基准测试工具</h1>
+    <h3><em>对比 Solana gRPC 与原始 Shred 延迟</em></h3>
+</div>
 
-[中文](https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md) | [Telegram](https://t.me/fnzero_group) | [Discord](https://discord.gg/vuazbGkqQE)
+<p align="center">
+    <strong>高性能 Rust CLI，用于 Solana 延迟测速：Yellowstone gRPC vs gRPC、raw shred vs raw shred、gRPC vs raw shred。支持 slot 首达延迟、UDP shred 吞吐、Entry/交易解码统计，以及 Jito Block Engine HTTP 性能测试，支持 macOS 和 Linux。</strong>
+</p>
 
-高性能 Rust CLI，用于 Solana 延迟测速：Yellowstone gRPC vs gRPC、raw shred vs raw shred、gRPC vs raw shred。支持 slot 首达延迟、UDP shred 吞吐、Entry/交易解码统计，以及 Jito Block Engine HTTP 性能测试，支持 macOS 和 Linux。
+<p align="center">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+    <a href="https://github.com/0xfnzero/grpc-benchmark"><img src="https://img.shields.io/github/stars/0xfnzero/grpc-benchmark?style=social" alt="GitHub stars"></a>
+    <a href="https://github.com/0xfnzero/grpc-benchmark/network"><img src="https://img.shields.io/github/forks/0xfnzero/grpc-benchmark?style=social" alt="GitHub forks"></a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&amp;logo=rust&amp;logoColor=white" alt="Rust">
+    <img src="https://img.shields.io/badge/Solana-9945FF?style=for-the-badge&amp;logo=solana&amp;logoColor=white" alt="Solana">
+    <img src="https://img.shields.io/badge/gRPC-4285F4?style=for-the-badge&amp;logo=grpc&amp;logoColor=white" alt="gRPC">
+</p>
+
+<p align="center">
+    <a href="https://github.com/0xfnzero/grpc-benchmark/blob/main/README_CN.md">中文</a> |
+    <a href="https://github.com/0xfnzero/grpc-benchmark/blob/main/README.md">English</a> |
+    <a href="https://fnzero.dev/">Website</a> |
+    <a href="https://t.me/fnzero_group">Telegram</a> |
+    <a href="https://discord.gg/vuazbGkqQE">Discord</a>
+</p>
 
 **关键词:** Solana benchmark, Yellowstone gRPC, Geyser gRPC, raw shred, ShredStream, shred latency, gRPC latency, validator infrastructure, Jito Block Engine.
 
