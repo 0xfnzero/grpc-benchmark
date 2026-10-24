@@ -7,3 +7,17 @@ linker = "x86_64-unknown-linux-gnu-gcc"
 version = "0.9.109" # Use your actual version
 features = ["vendored"]
 
+[build]
+incremental = false
+
+[profile.dev]
+debug = 1
+
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test]
+debug = 1
+
+[profile.test.package."*"]
+debug = 0
