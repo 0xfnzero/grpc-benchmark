@@ -131,10 +131,17 @@ message Entry {
 及对应的 `-2` 自定义路径，但请求/响应结构必须兼容。
 这不代表自动兼容任意 JSON、Yellowstone 交易流、WebSocket 或其他 protobuf 结构。
 
-当前解码器使用 Solana Entry 2.3 wire 类型，支持 legacy/v0 交易。
-交易 V1 或其他 Entry 编码需要另接匹配的解码适配器。
+wire 解码器支持 legacy、v0（含地址查找表）和 v1 交易。
+v1 使用 `0x81` 前缀，签名位于消息之后；UDP 与 Entry gRPC 都用首个签名对齐交易。
+UDP 还支持 DATA_COMPLETE 边界间的 Agave 4.x block marker，包括跨 shred 分片和零填充；marker 不计为交易。
+Entry gRPC 仍须发送完整的 `Vec<Entry>`，不能直接传入原始 block marker 或任意其他流格式。
 截断、尾随字节、非法数量或超大消息会拒绝并计入 `invalid` / `decode_errors`；
 没有样本时应先核对格式，不能当成服务商延迟结果。单条消息上限 64 MiB、Entry 数量上限 50,000。
+
+解析器只读取边界和签名，不执行密码学验签、交易语义校验或交易执行，也不代表支持未来的交易版本。
+wire 格式参考上游 [v1 message](https://github.com/anza-xyz/solana-sdk/blob/master/message/src/versions/v1/message.rs)、
+[versioned transaction](https://github.com/anza-xyz/solana-sdk/blob/master/transaction/src/versioned/mod.rs)
+及 [Agave block component](https://github.com/anza-xyz/agave/blob/master/entry/src/block_component.rs) 实现。
 
 UDP 默认 `--shred-decode-mode-N ledger`，即 raw Solana 格式；`compat` 是原有固定偏移兼容模式。
 已知前缀用 `--shred-udp-payload-prefix-skip-N N` 跳过，不是任意传输封装的自动识别器。
@@ -188,3 +195,7 @@ UDP 解码器还受 `--shred-max-tracked-slots` 和 `--shred-reassembly-gap-time
 UDP 测试把真实签名的 legacy/v0（含 ALT）交易放入合成的 data shred header，覆盖分片、乱序、前缀、重传和两种解码模式。
 本地认证 gRPC 服务验证真实流式传输、自定义 RPC 路径、非法 payload，以及同一笔签名交易通过
 UDP 和 Entry gRPC 对齐。测试还覆盖缺失数据片的真实 Reed-Solomon 恢复（纠删码片先到或后到）及五种命令行组合。这些属于本地正确性验证，不是生产服务商的性能实测。
+
+另以真实 legacy/v0/v1 样本验证签名，并通过 Entry gRPC 和两种 UDP 解码模式对齐，覆盖含零填充的分片 block marker。
+回归测试检查每个交易样本的所有截断位置，拒绝非规范/溢出的 compact-u16 长度，以及截断或未知版本的 marker。
+贡献者提供的主网回放数据未在这些本地测试中复测。

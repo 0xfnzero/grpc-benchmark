@@ -1,8 +1,7 @@
 //! Wire-compatible Entry subscription without a Jito proxy crate or running proxy.
 //! The default path is a protocol name, not a dependency on Jito's infrastructure.
+use crate::wire_entry::{self, WireEntry};
 use crate::{BenchmarkError, Result};
-use bincode::Options;
-use solana_entry::entry::Entry;
 use std::time::Duration;
 use tonic::{
     codec::ProstCodec,
@@ -74,20 +73,20 @@ pub async fn subscribe(
     Ok(response.into_inner())
 }
 
-/// Bounded, canonical bincode Vec<Entry>. Do not accept a truncated vector or trailing bytes.
-pub fn decode_entries(bytes: &[u8]) -> Result<Vec<Entry>> {
+/// Bounded, canonical `Vec<Entry>` with legacy/v0/v1 transactions. Reject truncation and trailing bytes.
+pub fn decode_entries(bytes: &[u8]) -> Result<Vec<WireEntry>> {
     if bytes.len() < 8 || bytes.len() > MAX_MESSAGE_BYTES {
         return Err(BenchmarkError::ConfigError(
             "invalid Entry payload size".into(),
         ));
     }
-    let count = u64::from_le_bytes(bytes[..8].try_into().expect("length checked"));
-    if count > 50_000 {
+    let (entries, consumed) = wire_entry::parse_entries(bytes).map_err(|_| {
+        BenchmarkError::ConfigError("cannot decode Vec<Entry>; check provider wire format".into())
+    })?;
+    if consumed != bytes.len() {
         return Err(BenchmarkError::ConfigError(
-            "Entry vector count exceeds limit".into(),
+            "trailing bytes after Vec<Entry>".into(),
         ));
     }
-    bincode::options().with_fixint_encoding().with_limit(bytes.len() as u64)
-        .reject_trailing_bytes().deserialize(bytes)
-        .map_err(|_| BenchmarkError::ConfigError("cannot decode bincode Vec<Entry>; check provider wire format and transaction version".into()))
+    Ok(entries)
 }

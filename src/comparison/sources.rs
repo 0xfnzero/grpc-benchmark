@@ -165,8 +165,8 @@ impl PreparedSource {
                                 let decoded_at = Instant::now();
                                 for entry in decoded {
                                     for transaction in entry.transactions {
-                                        if let Some(signature) = transaction.signatures.first() {
-                                            emit(&tx, source, SampleKey::Transaction { slot: message.slot, signature: *signature.as_array() }, decoded_at, &mut stats);
+                                        if let Some(signature) = transaction.first_signature {
+                                            emit(&tx, source, SampleKey::Transaction { slot: message.slot, signature }, decoded_at, &mut stats);
                                         }
                                     }
                                 }

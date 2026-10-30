@@ -1,10 +1,8 @@
 use crate::error::{BenchmarkError, Result};
-use bincode::Options;
+use crate::wire_entry::{self, BlockComponent, WireEntry, WireError};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use rustc_hash::{FxHashMap, FxHashSet};
-use solana_entry::entry::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Cursor;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -410,7 +408,6 @@ const CODE_SHRED_PAYLOAD_LEN: usize = 1228;
 const SIZE_OF_SIGNATURE: usize = 64;
 const SIZE_OF_MERKLE_ROOT: usize = 32;
 const SIZE_OF_MERKLE_PROOF_ENTRY: usize = 20;
-const MAX_ENTRY_COUNT: u64 = 50_000;
 const INITIAL_DECODER_BUFFER_CAPACITY: usize = 64 * 1024;
 
 #[inline]
@@ -713,33 +710,6 @@ impl DecodedCounts {
     }
 }
 
-fn bincode_opts(max_bytes: u64) -> impl Options + Copy {
-    bincode::options()
-        .with_fixint_encoding()
-        .with_limit(max_bytes)
-        .allow_trailing_bytes()
-}
-
-fn streaming_opts() -> impl Options + Copy {
-    bincode::options()
-        .with_fixint_encoding()
-        .allow_trailing_bytes()
-}
-
-fn is_eof(err: &bincode::Error) -> bool {
-    matches!(
-        err.as_ref(),
-        bincode::ErrorKind::Io(io) if io.kind() == std::io::ErrorKind::UnexpectedEof
-    )
-}
-
-fn invalid_bincode_error(message: &'static str) -> bincode::Error {
-    bincode::Error::from(std::io::Error::new(
-        std::io::ErrorKind::InvalidData,
-        message,
-    ))
-}
-
 /// Keeps the existing decoder deduplication and optionally exports newly decoded signatures.
 /// Clearing a batch's dedup set must not discard observations decoded earlier in the same packet.
 struct SignatureTracker {
@@ -774,16 +744,16 @@ impl SignatureTracker {
     }
 }
 
-fn count_entry(entry: &Entry, yielded_sigs: &mut SignatureTracker) -> DecodedCounts {
+fn count_entry(entry: &WireEntry, yielded_sigs: &mut SignatureTracker) -> DecodedCounts {
     let mut counts = DecodedCounts {
         entries: 1,
         transactions: 0,
     };
 
     for tx in &entry.transactions {
-        match tx.signatures.first() {
+        match tx.first_signature {
             Some(signature) => {
-                if yielded_sigs.insert(*signature.as_array()) {
+                if yielded_sigs.insert(signature) {
                     counts.transactions += 1;
                 }
             }
@@ -800,6 +770,7 @@ struct StreamingEntryDecoder {
     buffer: Vec<u8>,
     expected_count: Option<u64>,
     entries_yielded: u64,
+    marker_complete: bool,
     cursor: usize,
 }
 
@@ -809,6 +780,7 @@ impl StreamingEntryDecoder {
             buffer: Vec::with_capacity(INITIAL_DECODER_BUFFER_CAPACITY),
             expected_count: None,
             entries_yielded: 0,
+            marker_complete: false,
             cursor: 0,
         }
     }
@@ -817,18 +789,23 @@ impl StreamingEntryDecoder {
         self.buffer.clear();
         self.expected_count = None;
         self.entries_yielded = 0;
+        self.marker_complete = false;
         self.cursor = 0;
     }
 
     fn is_complete(&self) -> bool {
-        matches!(self.expected_count, Some(expected) if self.entries_yielded >= expected)
+        match self.expected_count {
+            Some(0) => self.marker_complete,
+            Some(expected) => self.entries_yielded >= expected,
+            None => false,
+        }
     }
 
     fn push(
         &mut self,
         payload: &[u8],
         yielded_sigs: &mut SignatureTracker,
-    ) -> std::result::Result<DecodedCounts, bincode::Error> {
+    ) -> std::result::Result<DecodedCounts, WireError> {
         self.buffer.extend_from_slice(payload);
         self.try_deserialize(yielded_sigs)
     }
@@ -836,16 +813,10 @@ impl StreamingEntryDecoder {
     fn try_deserialize(
         &mut self,
         yielded_sigs: &mut SignatureTracker,
-    ) -> std::result::Result<DecodedCounts, bincode::Error> {
+    ) -> std::result::Result<DecodedCounts, WireError> {
         if self.expected_count.is_none() && self.buffer.len() >= self.cursor + 8 {
-            let count = u64::from_le_bytes(
-                self.buffer[self.cursor..self.cursor + 8]
-                    .try_into()
-                    .map_err(|_| invalid_bincode_error("entry count slice"))?,
-            );
-            if count > MAX_ENTRY_COUNT {
-                return Err(invalid_bincode_error("invalid entry count"));
-            }
+            // A zero count starts a block marker, which carries no transactions.
+            let count = wire_entry::parse_entry_count(&self.buffer[self.cursor..])?;
             self.cursor += 8;
             self.expected_count = Some(count);
         }
@@ -854,8 +825,18 @@ impl StreamingEntryDecoder {
             return Ok(DecodedCounts::default());
         };
 
-        let opts = streaming_opts();
         let mut counts = DecodedCounts::default();
+
+        if expected == 0 && !self.marker_complete {
+            match wire_entry::parse_block_marker_body(&self.buffer[self.cursor..]) {
+                Ok((_, _, len)) => {
+                    self.cursor += len;
+                    self.marker_complete = true;
+                }
+                Err(WireError::Incomplete) => return Ok(counts),
+                Err(error) => return Err(error),
+            }
+        }
 
         while self.entries_yielded < expected {
             let remaining = &self.buffer[self.cursor..];
@@ -863,14 +844,13 @@ impl StreamingEntryDecoder {
                 break;
             }
 
-            let mut cursor = Cursor::new(remaining);
-            match opts.deserialize_from::<_, Entry>(&mut cursor) {
-                Ok(entry) => {
-                    self.cursor += cursor.position() as usize;
+            match wire_entry::parse_entry(remaining) {
+                Ok((entry, len)) => {
+                    self.cursor += len;
                     self.entries_yielded += 1;
                     counts.add(count_entry(&entry, yielded_sigs));
                 }
-                Err(error) if is_eof(&error) => break,
+                Err(WireError::Incomplete) => break,
                 Err(error) => return Err(error),
             }
         }
@@ -884,53 +864,36 @@ impl StreamingEntryDecoder {
     }
 }
 
-fn validate_vec_prefix(bytes: &[u8]) -> bool {
-    if bytes.len() < 8 {
-        return false;
-    }
-    let count = u64::from_le_bytes(bytes[..8].try_into().unwrap());
-    count <= MAX_ENTRY_COUNT
-}
-
+/// Decodes one DATA_COMPLETE range: an entry batch or a block marker, followed by optional padding.
 fn decode_batch_counts(bytes: &[u8], yielded_sigs: &mut SignatureTracker) -> Option<DecodedCounts> {
-    if !validate_vec_prefix(bytes) {
-        return None;
-    }
-    let entries: Vec<Entry> = bincode_opts(bytes.len() as u64).deserialize(bytes).ok()?;
     let mut counts = DecodedCounts::default();
-    for entry in &entries {
-        counts.add(count_entry(entry, yielded_sigs));
+    if let BlockComponent::EntryBatch(entries) = wire_entry::parse_block_component(bytes).ok()?.0 {
+        for entry in &entries {
+            counts.add(count_entry(entry, yielded_sigs));
+        }
     }
     Some(counts)
 }
 
+/// Salvage path: decodes back-to-back block components until the bytes run out or stop parsing.
 fn decode_concatenated_counts(bytes: &[u8], yielded_sigs: &mut SignatureTracker) -> DecodedCounts {
     let mut counts = DecodedCounts::default();
     let mut offset = 0usize;
-    let opts = bincode_opts(bytes.len() as u64);
-
     while offset + 8 <= bytes.len() {
         let remaining = &bytes[offset..];
-        if !validate_vec_prefix(remaining) {
-            break;
+        if remaining.iter().all(|&b| b == 0) {
+            break; // zero padding to the end of the FEC set
         }
-        let entries: Vec<Entry> = match opts.deserialize(remaining) {
-            Ok(entries) => entries,
-            Err(_) => break,
-        };
-        let consumed = match opts.serialized_size(&entries) {
-            Ok(size) => size as usize,
-            Err(_) => break,
-        };
-        if consumed == 0 {
+        let Ok((component, consumed)) = wire_entry::parse_block_component(remaining) else {
             break;
-        }
-        for entry in &entries {
-            counts.add(count_entry(entry, yielded_sigs));
+        };
+        if let BlockComponent::EntryBatch(entries) = component {
+            for entry in &entries {
+                counts.add(count_entry(entry, yielded_sigs));
+            }
         }
         offset += consumed;
     }
-
     counts
 }
 
@@ -1803,81 +1766,29 @@ fn parse_compat_packet(packet: &[u8], cfg_prefix_skip: usize) -> Option<ParsedCo
 }
 
 struct CompatBatchDecoder {
-    buffer: Vec<u8>,
-    expected_count: Option<u64>,
-    entries_yielded: u64,
-    cursor: usize,
+    decoder: StreamingEntryDecoder,
     yielded_sigs: SignatureTracker,
 }
 
 impl CompatBatchDecoder {
     fn new(collect_signatures: bool) -> Self {
         Self {
-            buffer: Vec::with_capacity(INITIAL_DECODER_BUFFER_CAPACITY),
-            expected_count: None,
-            entries_yielded: 0,
-            cursor: 0,
+            decoder: StreamingEntryDecoder::new(),
             yielded_sigs: SignatureTracker::new(collect_signatures),
         }
     }
 
     fn reset(&mut self) {
-        self.buffer.clear();
-        self.expected_count = None;
-        self.entries_yielded = 0;
-        self.cursor = 0;
+        self.decoder.reset();
         self.yielded_sigs.clear();
     }
 
-    fn push(&mut self, payload: &[u8]) -> std::result::Result<DecodedCounts, bincode::Error> {
-        self.buffer.extend_from_slice(payload);
-        self.try_deserialize()
+    fn push(&mut self, payload: &[u8]) -> std::result::Result<DecodedCounts, WireError> {
+        self.decoder.push(payload, &mut self.yielded_sigs)
     }
 
-    fn try_deserialize(&mut self) -> std::result::Result<DecodedCounts, bincode::Error> {
-        if self.expected_count.is_none() && self.buffer.len() >= self.cursor + 8 {
-            let count = u64::from_le_bytes(
-                self.buffer[self.cursor..self.cursor + 8]
-                    .try_into()
-                    .map_err(|_| invalid_bincode_error("entry count slice"))?,
-            );
-            if count > MAX_ENTRY_COUNT {
-                return Err(invalid_bincode_error("invalid entry count"));
-            }
-            self.cursor += 8;
-            self.expected_count = Some(count);
-        }
-
-        let Some(expected) = self.expected_count else {
-            return Ok(DecodedCounts::default());
-        };
-
-        let opts = streaming_opts();
-        let mut counts = DecodedCounts::default();
-        while self.entries_yielded < expected {
-            let remaining = &self.buffer[self.cursor..];
-            if remaining.is_empty() {
-                break;
-            }
-
-            let mut cursor = Cursor::new(remaining);
-            match opts.deserialize_from::<_, Entry>(&mut cursor) {
-                Ok(entry) => {
-                    self.cursor += cursor.position() as usize;
-                    self.entries_yielded += 1;
-                    counts.add(count_entry(&entry, &mut self.yielded_sigs));
-                }
-                Err(error) if is_eof(&error) => break,
-                Err(error) => return Err(error),
-            }
-        }
-
-        if self.cursor > 128 * 1024 {
-            self.buffer.drain(..self.cursor);
-            self.cursor = 0;
-        }
-
-        Ok(counts)
+    fn is_complete(&self) -> bool {
+        self.decoder.is_complete()
     }
 }
 
@@ -1947,6 +1858,7 @@ impl CompatSlotAccumulator {
                 Ok(decoded) => counts.add(decoded),
                 Err(_) => {
                     self.decode_errors += 1;
+                    self.decoder.reset();
                     return;
                 }
             }
@@ -1954,6 +1866,9 @@ impl CompatSlotAccumulator {
                 self.slot_complete = true;
             }
             if batch_complete {
+                if !self.decoder.is_complete() {
+                    self.decode_errors += 1;
+                }
                 self.decoder.reset();
             }
         }
@@ -2088,6 +2003,44 @@ impl ShredstreamCompatReassembler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn block_marker() -> Vec<u8> {
+        let mut bytes = 0u64.to_le_bytes().to_vec();
+        bytes.extend(1u16.to_le_bytes());
+        bytes.push(1);
+        bytes.extend(41u16.to_le_bytes());
+        bytes.extend([1u8; 41]);
+        bytes
+    }
+
+    #[test]
+    fn streaming_marker_requires_the_entire_body() {
+        let marker = block_marker();
+        for cut in 0..marker.len() {
+            let mut decoder = StreamingEntryDecoder::new();
+            let mut signatures = SignatureTracker::new(true);
+            decoder.push(&marker[..cut], &mut signatures).unwrap();
+            assert!(!decoder.is_complete(), "marker cut {cut}");
+            decoder.push(&marker[cut..], &mut signatures).unwrap();
+            assert!(decoder.is_complete());
+            assert!(signatures.take().is_empty());
+        }
+    }
+
+    #[test]
+    fn compat_rejects_truncated_and_unknown_markers() {
+        let marker = block_marker();
+        for cut in 8..marker.len() {
+            let mut slot = CompatSlotAccumulator::new(true);
+            slot.push(0, marker[..cut].to_vec(), true, false);
+            assert!(slot.decode_errors > 0, "marker cut {cut}");
+        }
+        let mut invalid = marker;
+        invalid[8..10].copy_from_slice(&2u16.to_le_bytes());
+        let mut slot = CompatSlotAccumulator::new(true);
+        slot.push(0, invalid, true, false);
+        assert!(slot.decode_errors > 0);
+    }
 
     fn write_u16(raw: &mut [u8], offset: usize, value: u16) {
         raw[offset..offset + 2].copy_from_slice(&value.to_le_bytes());

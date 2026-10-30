@@ -1,5 +1,7 @@
 # Solana Yellowstone gRPC / Raw Shred Benchmark
 
+Version v1.6 supports legacy/v0/v1 wire transactions and Agave 4.x UDP block markers. See the [complete comparison guide](shred-comparison.md#entry-protocol-compatibility) for protocol requirements and measurement limits.
+
 This guide mirrors the root README and keeps comparison benchmarks first. The tool targets Solana Yellowstone gRPC, Geyser gRPC, raw shred/ShredStream latency, UDP shred throughput, and Jito Block Engine HTTP benchmarking.
 
 ## Platform Binaries
@@ -23,7 +25,7 @@ cd "$HOME/grpc-benchmark"
 Use a specific tag:
 
 ```bash
-VERSION=v1.4 ./install.sh
+VERSION=v1.6 ./install.sh
 ```
 
 If the install directory already exists and was not created by this installer, use a new `INSTALL_DIR` or set `FORCE_INSTALL=1` to back it up and replace it.
@@ -89,25 +91,25 @@ Raw shred decoding does not depend on Jito ShredStream services. `ledger` mode p
 
 ## Release And Tag
 
-Preferred flow: push a `v*` tag and let GitHub Actions build/upload all macOS/Linux packages:
+With GitHub Actions enabled, push a `v*` tag to build/upload all macOS/Linux packages. If Actions is disabled, use the manual fallback below:
 
 ```bash
-git tag v1.4
-git push origin v1.4
+git tag v1.6
+git push origin v1.6
 ```
 
 Manual fallback:
 
 ```bash
-VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.6 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 
-git tag v1.4
-git push origin v1.4
+git tag v1.6
+git push origin v1.6
 
-gh release create v1.4 \
+gh release create v1.6 \
   release/install.sh \
   release/grpc-benchmark-*.tar.gz \
   release/SHA256SUMS \
-  --title "v1.4" \
+  --title "v1.6" \
   --notes "gRPC/Shred comparison benchmarks and raw shred decoding updates"
 ```

@@ -1,5 +1,7 @@
 # Solana Yellowstone gRPC / Raw Shred 基准测试工具
 
+v1.6 支持 legacy/v0/v1 wire 交易及 Agave 4.x UDP block marker。协议要求和测量范围详见[完整对比指南](shred-comparison_CN.md)。
+
 本教程与根目录 README 保持一致，并把对比测速排在最前面。工具覆盖 Solana Yellowstone gRPC、Geyser gRPC、raw shred/ShredStream 延迟、UDP shred 吞吐，以及 Jito Block Engine HTTP 测速。
 
 ## 平台二进制
@@ -23,7 +25,7 @@ cd "$HOME/grpc-benchmark"
 指定 tag：
 
 ```bash
-VERSION=v1.4 ./install.sh
+VERSION=v1.6 ./install.sh
 ```
 
 如果安装目录已存在且不是本安装脚本创建的目录，请换一个 `INSTALL_DIR`，或设置 `FORCE_INSTALL=1` 先备份再替换。
@@ -89,25 +91,25 @@ raw shred 解码不依赖 Jito ShredStream 服务。`ledger` 模式直接解析 
 
 ## Release 和 Tag
 
-推荐流程：推送 `v*` tag，由 GitHub Actions 自动构建并上传全部 macOS/Linux 包：
+启用 GitHub Actions 时，推送 `v*` tag 可自动构建并上传全部 macOS/Linux 包；Actions 关闭时使用下方手动发布流程：
 
 ```bash
-git tag v1.4
-git push origin v1.4
+git tag v1.6
+git push origin v1.6
 ```
 
 手动兜底方式：
 
 ```bash
-VERSION=v1.4 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.6 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 
-git tag v1.4
-git push origin v1.4
+git tag v1.6
+git push origin v1.6
 
-gh release create v1.4 \
+gh release create v1.6 \
   release/install.sh \
   release/grpc-benchmark-*.tar.gz \
   release/SHA256SUMS \
-  --title "v1.4" \
+  --title "v1.6" \
   --notes "gRPC/Shred 对比测速和 raw shred 解码更新"
 ```

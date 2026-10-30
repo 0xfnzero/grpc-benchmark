@@ -141,11 +141,20 @@ Override the path independently using `--entries-method-1 /package.Service/Metho
 This does **not** make arbitrary JSON, Yellowstone transaction streams, WebSockets, or different
 protobuf schemas compatible. Header names, TLS, and RPC path are configurable without a proxy.
 
-The decoder currently uses Solana Entry 2.3 wire types: legacy/v0 transactions. A provider using
-transaction V1 or a different Entry encoding needs a matching decoder adapter. Malformed,
+The wire decoder supports legacy, v0 (including address lookup tables), and v1 transactions.
+V1 uses the `0x81` prefix and places signatures after the message; UDP and Entry gRPC therefore
+match its first signature in the same way. UDP also supports Agave 4.x block markers between
+DATA_COMPLETE boundaries, including split markers and zero padding; markers contain no transactions.
+Entry gRPC must still send a complete `Vec<Entry>`, not a raw block marker or an arbitrary stream format. Malformed,
 truncated, trailing-byte, excessive-count and oversized messages are rejected and counted;
 check `decode_errors`/`invalid` rather than interpreting zero matches as a fast provider.
 Message size is capped at 64 MiB and Entry count at 50,000 per message.
+
+The parser only reads boundaries and signatures. It does not perform cryptographic verification
+or transaction sanitization/execution, and does not imply support for future transaction versions.
+Wire layouts are documented by the upstream [v1 message](https://github.com/anza-xyz/solana-sdk/blob/master/message/src/versions/v1/message.rs),
+[versioned transaction](https://github.com/anza-xyz/solana-sdk/blob/master/transaction/src/versioned/mod.rs),
+and [Agave block component](https://github.com/anza-xyz/agave/blob/master/entry/src/block_component.rs) implementations.
 
 For UDP, `--shred-decode-mode-N ledger` is the default raw Solana format. `compat` is the
 existing fixed-offset compatibility decoder. `--shred-udp-payload-prefix-skip-N N` supports
@@ -215,3 +224,8 @@ prefixes and retransmission in both decoder modes. A local authenticated Entry g
 the actual streaming transport, a custom RPC path, malformed payloads, and the same signed
 transaction arriving through UDP and Entry gRPC. Tests also cover missing-data Reed-Solomon recovery with either parity/data arrival order and all five CLI combinations. These are local correctness tests, not production
 provider performance measurements.
+
+Real legacy/v0/v1 fixtures are additionally verified and matched through Entry gRPC and both UDP
+decoder modes with a padded, split block marker. Regression tests reject noncanonical/overflowing
+compact-u16 lengths and truncated/unknown-version markers; every truncation of each wire transaction
+fixture is checked. The contributor's mainnet replay numbers are not reproduced by these local tests.

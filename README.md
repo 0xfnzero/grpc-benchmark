@@ -29,6 +29,17 @@
 
 **Keywords:** Solana benchmark, Yellowstone gRPC, Geyser gRPC, raw shred, ShredStream, shred latency, gRPC latency, validator infrastructure, Jito Block Engine.
 
+## v1.6: legacy, v0 and v1 Transaction Decoding
+
+Raw UDP shred decoding and Entry gRPC transaction comparison now support legacy, v0 and
+v1 transactions. The wire parser reads transaction boundaries and first signatures without
+depending on the Solana 2.3 transaction deserializer. Raw UDP also recognizes Agave 4.x block
+markers, which contain no transactions, including markers split across shreds.
+
+Entry gRPC still requires the documented `Vec<Entry>` payload and rejects truncated or
+trailing data. This is a measurement parser: it does not verify signatures, execute transactions
+or establish confirmation. See the [wire compatibility guide](docs/shred-comparison.md#entry-protocol-compatibility).
+
 ## Supported Binaries
 
 Release packages support macOS and Linux. The installer auto-detects:
@@ -52,7 +63,7 @@ Comparison benchmarks are listed first because they are the main latency-compari
 | `shred-benchmark` | `run-shred-benchmark.sh` | Raw shred UDP throughput and Entry/transaction decode stats |
 | `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine HTTP request performance |
 
-The old private stream entrypoint has been removed. Raw shred decoding does not depend on Jito ShredStream services. The default `ledger` mode parses Solana wire headers directly, streams contiguous data shred batches into `bincode Vec<Entry>`, and can use Merkle Reed-Solomon FEC to recover missing data shreds. `shred-comparison` supports `slot`, `shred`, and `transaction` modes with UDP and provider-hosted Entry gRPC adapters; only transaction mode decodes UDP Entries. `grpc-vs-shred` retains first-slot header comparison.
+The old private stream entrypoint has been removed. Raw shred decoding does not depend on Jito ShredStream services. The default `ledger` mode parses Solana wire headers directly, streams contiguous data shred batches through the legacy/v0/v1 wire parser, and can use Merkle Reed-Solomon FEC to recover missing data shreds. `shred-comparison` supports `slot`, `shred`, and `transaction` modes with UDP and provider-hosted Entry gRPC adapters; only transaction mode decodes UDP Entries. `grpc-vs-shred` retains first-slot header comparison.
 
 ## Install
 
@@ -68,7 +79,7 @@ cd "$HOME/grpc-benchmark"
 Install a specific release tag or directory:
 
 ```bash
-VERSION=v1.5 ./install.sh
+VERSION=v1.6 ./install.sh
 INSTALL_DIR=/opt/grpc-benchmark sudo -E ./install.sh
 ```
 
@@ -77,7 +88,7 @@ If `INSTALL_DIR` already exists and was not created by this installer, the insta
 If you need to force a platform asset:
 
 ```bash
-TARGET=x86_64-unknown-linux-gnu VERSION=v1.5 ./install.sh
+TARGET=x86_64-unknown-linux-gnu VERSION=v1.6 ./install.sh
 ```
 
 ## Comparison Benchmarks
@@ -241,7 +252,7 @@ export SHRED_MAX_FEC_SETS_PER_SLOT=32
 Build the host platform package:
 
 ```bash
-VERSION=v1.5 ./compile.sh
+VERSION=v1.6 ./compile.sh
 ```
 
 Build multiple macOS/Linux packages when the required Rust targets and linkers are available:
@@ -249,7 +260,7 @@ Build multiple macOS/Linux packages when the required Rust targets and linkers a
 ```bash
 rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
 
-VERSION=v1.5 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.6 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 ```
 
 Release assets are generated under `release/`:
@@ -265,11 +276,11 @@ SHA256SUMS
 
 ## Create Tag And GitHub Release
 
-Recommended release flow: push a `v*` tag. GitHub Actions builds and uploads all macOS/Linux binary packages automatically:
+With GitHub Actions enabled, push a `v*` tag to build and upload all macOS/Linux binary packages automatically. If Actions is disabled, use the manual fallback below:
 
 ```bash
-git tag v1.5
-git push origin v1.5
+git tag v1.6
+git push origin v1.6
 ```
 
 The release workflow publishes:
@@ -286,15 +297,15 @@ SHA256SUMS
 Manual fallback:
 
 ```bash
-VERSION=v1.5 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.6 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 
-git tag v1.5
-git push origin v1.5
+git tag v1.6
+git push origin v1.6
 
-gh release create v1.5 \
+gh release create v1.6 \
   release/install.sh \
   release/grpc-benchmark-*.tar.gz \
   release/SHA256SUMS \
-  --title "v1.5" \
+  --title "v1.6" \
   --notes "gRPC/Shred comparison benchmarks and raw shred decoding updates"
 ```

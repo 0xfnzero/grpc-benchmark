@@ -4,6 +4,7 @@ pub mod grpc_client;
 pub mod output;
 pub mod shred_client;
 pub mod stats;
+pub mod wire_entry;
 
 pub use config::Config;
 pub use error::{BenchmarkError, Result};
