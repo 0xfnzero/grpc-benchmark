@@ -29,6 +29,16 @@
 
 **关键词:** Solana benchmark, Yellowstone gRPC, Geyser gRPC, raw shred, ShredStream, shred latency, gRPC latency, validator infrastructure, Jito Block Engine.
 
+## v1.6：legacy、v0 和 v1 交易解码
+
+raw UDP shred 解码和 Entry gRPC 交易对比现在支持 legacy、v0、v1 交易。
+wire 解析器直接读取交易边界和首个签名，不再依赖 Solana 2.3 的交易反序列化类型。
+raw UDP 还支持 Agave 4.x 的 block marker，包含跨 shred 分片的 marker；marker 本身不计为交易。
+
+Entry gRPC 仍须使用约定的 `Vec<Entry>` payload，截断或带有尾随数据的消息会被拒绝。
+这是用于测量的解析器，不负责验签、执行交易或判断确认状态。
+详见[协议兼容说明](docs/shred-comparison_CN.md#entry-grpc-协议要求)。
+
 ## 二进制平台支持
 
 Release 包支持 macOS 和 Linux，安装脚本会自动识别：
@@ -52,7 +62,7 @@ Release 包支持 macOS 和 Linux，安装脚本会自动识别：
 | `shred-benchmark` | `run-shred-benchmark.sh` | raw shred UDP 吞吐、Entry/交易解码统计 |
 | `benchmark-jito` | `run-benchmark-jito.sh` | Jito Block Engine HTTP 请求性能 |
 
-旧的私有流入口已移除。raw shred 解码不依赖 Jito ShredStream 服务。默认 `ledger` 模式直接解析 Solana wire header，按连续 data shred 流式解码 `bincode Vec<Entry>`，并可用 Merkle Reed-Solomon FEC 恢复缺失 data shred。`shred-comparison` 提供 `slot`、`shred`、`transaction` 三种模式，支持 UDP 和服务商 Entry gRPC；只有交易模式对 UDP 做 Entry 解码。`grpc-vs-shred` 保留 slot header 首达对比。
+旧的私有流入口已移除。raw shred 解码不依赖 Jito ShredStream 服务。默认 `ledger` 模式直接解析 Solana wire header，按连续 data shred 流式解析 legacy/v0/v1 交易，并可用 Merkle Reed-Solomon FEC 恢复缺失 data shred。`shred-comparison` 提供 `slot`、`shred`、`transaction` 三种模式，支持 UDP 和服务商 Entry gRPC；只有交易模式对 UDP 做 Entry 解码。`grpc-vs-shred` 保留 slot header 首达对比。
 
 ## 安装
 
@@ -68,7 +78,7 @@ cd "$HOME/grpc-benchmark"
 指定 release tag 或安装目录：
 
 ```bash
-VERSION=v1.5 ./install.sh
+VERSION=v1.6 ./install.sh
 INSTALL_DIR=/opt/grpc-benchmark sudo -E ./install.sh
 ```
 
@@ -77,7 +87,7 @@ INSTALL_DIR=/opt/grpc-benchmark sudo -E ./install.sh
 强制指定平台包：
 
 ```bash
-TARGET=x86_64-unknown-linux-gnu VERSION=v1.5 ./install.sh
+TARGET=x86_64-unknown-linux-gnu VERSION=v1.6 ./install.sh
 ```
 
 ## 对比测速
@@ -237,7 +247,7 @@ export SHRED_MAX_FEC_SETS_PER_SLOT=32
 构建当前机器平台：
 
 ```bash
-VERSION=v1.5 ./compile.sh
+VERSION=v1.6 ./compile.sh
 ```
 
 如果本机或 CI 已配置对应 Rust target 和 linker，可以一次构建 macOS/Linux 多平台包：
@@ -245,7 +255,7 @@ VERSION=v1.5 ./compile.sh
 ```bash
 rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
 
-VERSION=v1.5 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.6 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 ```
 
 产物在 `release/`：
@@ -264,8 +274,8 @@ SHA256SUMS
 推荐流程：推送 `v*` tag。GitHub Actions 会自动构建并上传全部 macOS/Linux 二进制包：
 
 ```bash
-git tag v1.5
-git push origin v1.5
+git tag v1.6
+git push origin v1.6
 ```
 
 release workflow 会发布：
@@ -282,15 +292,15 @@ SHA256SUMS
 手动兜底方式：
 
 ```bash
-VERSION=v1.5 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
+VERSION=v1.6 TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin" ./compile.sh
 
-git tag v1.5
-git push origin v1.5
+git tag v1.6
+git push origin v1.6
 
-gh release create v1.5 \
+gh release create v1.6 \
   release/install.sh \
   release/grpc-benchmark-*.tar.gz \
   release/SHA256SUMS \
-  --title "v1.5" \
+  --title "v1.6" \
   --notes "gRPC/Shred 对比测速和 raw shred 解码更新"
 ```
