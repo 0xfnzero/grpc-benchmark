@@ -81,11 +81,9 @@ openssl = { version = "0.10.73", features = ["vendored"] }
 
 rustls = { version = "0.23", features = ["ring"] }
 
-# Raw Solana shred decoding
-bincode = "1.3"
+# Raw Solana shred decoding (entries are parsed by src/wire_entry.rs)
 prost = "0.13"
 socket2 = "0.5"
-solana-entry = "2.3.7"
 rustc-hash = "2"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
@@ -95,5 +93,8 @@ reed-solomon-erasure = { version = "6", features = ["simd-accel"] }
 reed-solomon-erasure = "6"
 
 [dev-dependencies]
+# Used only to build signed legacy/v0 fixtures in tests.
+bincode = "1.3"
+solana-entry = "2.3.7"
 solana-sdk = "2.3.1"
 tokio-stream = { version = "0.1", features = ["net"] }

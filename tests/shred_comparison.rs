@@ -137,7 +137,7 @@ fn udp_config(mode: ShredDecodeMode, prefix: usize) -> SourceConfig {
 fn bounded_entry_decoder_rejects_malformed_truncated_trailing_and_excessive_counts() {
     let (bytes, sig) = signed_entries();
     let decoded = decode_entries(&bytes).unwrap();
-    assert_eq!(*decoded[0].transactions[0].signatures[0].as_array(), sig);
+    assert_eq!(decoded[0].transactions[0].first_signature, Some(sig));
     assert!(decode_entries(&bytes[..bytes.len() - 1]).is_err());
     let mut trailing = bytes.clone();
     trailing.push(0);
@@ -628,8 +628,8 @@ async fn entry_stream_eof_and_unknown_rpc_method_are_errors() {
 async fn entry_streams_with_different_entry_batches_match_actual_signed_transactions() {
     let (legacy, sig_a) = signed_entries();
     let (v0, sig_b) = signed_v0_entries();
-    let mut combined = decode_entries(&legacy).unwrap();
-    combined.extend(decode_entries(&v0).unwrap());
+    let mut combined: Vec<Entry> = bincode::deserialize(&legacy).unwrap();
+    combined.extend(bincode::deserialize::<Vec<Entry>>(&v0).unwrap());
     let (url_a, shutdown_a, server_a) = mock_server(vec![EntryMessage {
         slot: 123,
         entries: bincode::serialize(&combined).unwrap(),
