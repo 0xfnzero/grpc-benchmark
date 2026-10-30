@@ -1,7 +1,7 @@
 //! Wire-compatible Entry subscription without a Jito proxy crate or running proxy.
 //! The default path is a protocol name, not a dependency on Jito's infrastructure.
-use crate::{BenchmarkError, Result};
 use crate::wire_entry::{self, WireEntry};
+use crate::{BenchmarkError, Result};
 use std::time::Duration;
 use tonic::{
     codec::ProstCodec,
@@ -73,7 +73,7 @@ pub async fn subscribe(
     Ok(response.into_inner())
 }
 
-/// Bounded, canonical `Vec<Entry>` (any transaction version). Do not accept a truncated vector or trailing bytes.
+/// Bounded, canonical `Vec<Entry>` with legacy/v0/v1 transactions. Reject truncation and trailing bytes.
 pub fn decode_entries(bytes: &[u8]) -> Result<Vec<WireEntry>> {
     if bytes.len() < 8 || bytes.len() > MAX_MESSAGE_BYTES {
         return Err(BenchmarkError::ConfigError(

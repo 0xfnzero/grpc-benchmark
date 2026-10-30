@@ -144,6 +144,12 @@ fn bounded_entry_decoder_rejects_malformed_truncated_trailing_and_excessive_coun
     assert!(decode_entries(&trailing).is_err());
     assert!(decode_entries(&50001u64.to_le_bytes()).is_err());
     assert!(decode_entries(&[]).is_err());
+    // One entry, one signature: replace the static-account count with a noncanonical alias.
+    let keys_offset = 8 + 48 + 1 + 64 + 3;
+    let mut aliased = bytes.clone();
+    aliased.splice(keys_offset..keys_offset + 1, [bytes[keys_offset] | 0x80, 0]);
+    assert!(bincode::deserialize::<Vec<Entry>>(&aliased).is_err());
+    assert!(decode_entries(&aliased).is_err());
     let message = EntryMessage {
         slot: 123,
         entries: vec![1, 2],
@@ -153,6 +159,104 @@ fn bounded_entry_decoder_rejects_malformed_truncated_trailing_and_excessive_coun
         prost::Message::encode_to_vec(&message),
         vec![8, 123, 18, 2, 1, 2]
     );
+}
+
+#[tokio::test]
+async fn v1_and_block_markers_match_across_udp_and_entry_transports() {
+    use solana_sdk::{signature::Signature, transaction::VersionedTransaction};
+    let mut transactions = Vec::new();
+    let mut expected = std::collections::BTreeSet::new();
+    for text in [
+        include_str!("fixtures/legacy_tx.hex"),
+        include_str!("fixtures/v0_tx.hex"),
+        include_str!("fixtures/v1_tx.hex"),
+    ] {
+        let text = text.trim();
+        let raw: Vec<u8> = (0..text.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&text[i..i + 2], 16).unwrap())
+            .collect();
+        let signature = if raw[0] == 0x81 {
+            let message_len = raw.len() - usize::from(raw[1]) * 64;
+            let sig: [u8; 64] = raw[message_len..message_len + 64].try_into().unwrap();
+            // V1 signs the prefix + message; its first static address starts at byte 42.
+            assert!(Signature::from(sig).verify(&raw[42..74], &raw[..message_len]));
+            sig
+        } else {
+            let tx: VersionedTransaction = bincode::deserialize(&raw).unwrap();
+            tx.verify_and_hash_message().unwrap();
+            *tx.signatures[0].as_array()
+        };
+        expected.insert(signature);
+        transactions.push(raw);
+    }
+    let mut batch = 1u64.to_le_bytes().to_vec();
+    batch.extend(1u64.to_le_bytes());
+    batch.extend([7u8; 32]);
+    batch.extend((transactions.len() as u64).to_le_bytes());
+    for transaction in transactions {
+        batch.extend(transaction);
+    }
+
+    let mut marker = 0u64.to_le_bytes().to_vec();
+    marker.extend(1u16.to_le_bytes());
+    marker.push(1);
+    marker.extend(41u16.to_le_bytes());
+    marker.extend([1u8; 41]);
+    marker.extend([0u8; 100]);
+
+    for mode in [ShredDecodeMode::Ledger, ShredDecodeMode::Compat] {
+        let (url, shutdown, server) = mock_server(vec![EntryMessage {
+            slot: 123,
+            entries: batch.clone(),
+        }])
+        .await;
+        let grpc = entries_config(url, false)
+            .prepare(Mode::Transaction)
+            .await
+            .unwrap();
+        let udp = udp_config(mode, 0)
+            .prepare(Mode::Transaction)
+            .await
+            .unwrap();
+        let addr = udp.local_addr().unwrap().unwrap();
+        let (tx, mut rx) = mpsc::channel(256);
+        let stop = Instant::now() + Duration::from_millis(300);
+        let grpc_task = tokio::spawn(grpc.run(0, Mode::Transaction, stop, tx.clone()));
+        let udp_task = tokio::spawn(udp.run(1, Mode::Transaction, stop, tx));
+        let sender = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let mut header = packets(&marker, 123);
+        header.last_mut().unwrap()[85] = 0x40; // DATA_COMPLETE, but more batches follow.
+        let next_index = header.len() as u32;
+        let mut data = packets(&batch, 123);
+        for (i, packet) in data.iter_mut().enumerate() {
+            packet[73..77].copy_from_slice(&(next_index + i as u32).to_le_bytes());
+        }
+        header.extend(data);
+        header.push(header.last().unwrap().clone()); // retransmission must not add a signature.
+        for packet in header {
+            sender.send_to(&packet, addr).await.unwrap();
+        }
+        let mut observed = [
+            std::collections::BTreeSet::new(),
+            std::collections::BTreeSet::new(),
+        ];
+        let mut count = 0;
+        while let Some(event) = rx.recv().await {
+            let SampleKey::Transaction { slot, signature } = event.key else {
+                panic!("expected a transaction")
+            };
+            assert_eq!(slot, 123);
+            observed[event.source].insert(signature);
+            count += 1;
+        }
+        assert_eq!(observed, [expected.clone(), expected.clone()], "{mode:?}");
+        assert_eq!(count, 6);
+        assert_eq!(grpc_task.await.unwrap().unwrap().decode_errors, 0);
+        assert_eq!(udp_task.await.unwrap().unwrap().decode_errors, 0);
+        let _ = shutdown.send(());
+        server.await.unwrap();
+    }
 }
 
 #[tokio::test]

@@ -1,8 +1,8 @@
-//! Version-agnostic decoder for the Solana `Entry` wire format.
+//! Decoder for the Solana `Entry` wire format with legacy, v0 and v1 transactions.
 //!
 //! The benchmark only needs entry boundaries and each transaction's first signature, so this
-//! parses just enough of the wire format to find them. It accepts every transaction version
-//! currently on mainnet — legacy, v0 and v1 (`0x81`, message first and signatures last) — and the
+//! parses just enough of the wire format to find them. It accepts legacy, v0 and v1
+//! (`0x81`, message first and signatures last), and the
 //! block components that Agave 4.x writes between DATA_COMPLETE boundaries: an entry batch, or a
 //! block marker (an entry count of zero followed by `u16 version | u8 variant | u16 len | data`).
 
@@ -57,8 +57,14 @@ impl<'a> Reader<'a> {
     }
 
     fn take(&mut self, len: usize) -> WireResult<&'a [u8]> {
-        let end = self.offset.checked_add(len).ok_or(WireError::Invalid("length overflow"))?;
-        let slice = self.bytes.get(self.offset..end).ok_or(WireError::Incomplete)?;
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or(WireError::Invalid("length overflow"))?;
+        let slice = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or(WireError::Incomplete)?;
         self.offset = end;
         Ok(slice)
     }
@@ -88,6 +94,12 @@ impl<'a> Reader<'a> {
         let mut value = 0usize;
         for shift in [0, 7, 14] {
             let byte = self.u8()?;
+            if shift > 0 && byte == 0 {
+                return Err(WireError::Invalid("non-canonical short_vec length"));
+            }
+            if shift == 14 && byte > 3 {
+                return Err(WireError::Invalid("short_vec length exceeds u16"));
+            }
             value |= usize::from(byte & 0x7f) << shift;
             if byte & 0x80 == 0 {
                 return Ok(value);
@@ -118,13 +130,22 @@ pub fn parse_transaction(bytes: &[u8]) -> WireResult<(WireTransaction, usize)> {
 /// legacy / v0: `short_vec<signature>` then the message.
 fn parse_legacy_or_v0(reader: &mut Reader) -> WireResult<Option<[u8; SIGNATURE_SIZE]>> {
     let num_signatures = reader.short_vec_len()?;
-    let first_signature = if num_signatures > 0 { Some(reader.signature()?) } else { None };
+    let first_signature = if num_signatures > 0 {
+        Some(reader.signature()?)
+    } else {
+        None
+    };
     reader.skip(num_signatures.saturating_sub(1) * SIGNATURE_SIZE)?;
 
-    let version_or_header = *reader.bytes.get(reader.offset).ok_or(WireError::Incomplete)?;
+    let version_or_header = *reader
+        .bytes
+        .get(reader.offset)
+        .ok_or(WireError::Incomplete)?;
     let is_v0 = match version_or_header {
         0x80 => true,
-        prefix if prefix & 0x80 != 0 => return Err(WireError::Invalid("unsupported message version")),
+        prefix if prefix & 0x80 != 0 => {
+            return Err(WireError::Invalid("unsupported message version"))
+        }
         _ => false,
     };
     if is_v0 {
@@ -176,7 +197,11 @@ fn parse_v1(reader: &mut Reader) -> WireResult<Option<[u8; SIGNATURE_SIZE]>> {
         payload_len += num_accounts + data_len;
     }
     reader.skip(payload_len)?;
-    let first_signature = if num_signatures > 0 { Some(reader.signature()?) } else { None };
+    let first_signature = if num_signatures > 0 {
+        Some(reader.signature()?)
+    } else {
+        None
+    };
     reader.skip(num_signatures.saturating_sub(1) * SIGNATURE_SIZE)?;
     Ok(first_signature)
 }
@@ -196,7 +221,14 @@ pub fn parse_entry(bytes: &[u8]) -> WireResult<(WireEntry, usize)> {
         reader.offset += len;
         transactions.push(transaction);
     }
-    Ok((WireEntry { num_hashes, hash, transactions }, reader.offset))
+    Ok((
+        WireEntry {
+            num_hashes,
+            hash,
+            transactions,
+        },
+        reader.offset,
+    ))
 }
 
 /// Reads the u64 entry count that starts every entry batch and block marker.
@@ -256,12 +288,44 @@ mod tests {
 
     fn hex(s: &str) -> Vec<u8> {
         let s = s.trim();
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn rejects_noncanonical_and_overflowing_short_vec_lengths() {
+        for encoded in [
+            &[0x80, 0x00][..],
+            &[0x81, 0x00],
+            &[0x80, 0x80, 0x00],
+            &[0xff, 0xff, 0x04],
+        ] {
+            assert!(
+                matches!(
+                    Reader::new(encoded).short_vec_len(),
+                    Err(WireError::Invalid(_))
+                ),
+                "{encoded:?}"
+            );
+        }
+        for (encoded, expected) in [
+            (&[0x7f][..], 127),
+            (&[0x80, 0x01], 128),
+            (&[0xff, 0xff, 0x03], 65535),
+        ] {
+            assert_eq!(Reader::new(encoded).short_vec_len(), Ok(expected));
+        }
     }
 
     #[test]
     fn parses_every_transaction_version_to_its_exact_length() {
-        for (name, tx) in [("legacy", LEGACY_TX_HEX), ("v0", V0_TX_HEX), ("v1", V1_TX_HEX)] {
+        for (name, tx) in [
+            ("legacy", LEGACY_TX_HEX),
+            ("v0", V0_TX_HEX),
+            ("v1", V1_TX_HEX),
+        ] {
             let tx = hex(tx);
             let (parsed, len) = parse_transaction(&tx).unwrap();
             assert_eq!(len, tx.len(), "{name}");
@@ -271,16 +335,27 @@ mod tests {
             } else {
                 &tx[1..65]
             };
-            assert_eq!(parsed.first_signature.unwrap().as_slice(), expected, "{name}");
-            for cut in [1, tx.len() / 2, tx.len() - 1] {
-                assert_eq!(parse_transaction(&tx[..cut]).unwrap_err(), WireError::Incomplete, "{name} cut {cut}");
+            assert_eq!(
+                parsed.first_signature.unwrap().as_slice(),
+                expected,
+                "{name}"
+            );
+            for cut in 0..tx.len() {
+                assert_eq!(
+                    parse_transaction(&tx[..cut]).unwrap_err(),
+                    WireError::Incomplete,
+                    "{name} cut {cut}"
+                );
             }
         }
     }
 
     #[test]
     fn parses_entry_batch_and_block_markers() {
-        let txs: Vec<Vec<u8>> = [LEGACY_TX_HEX, V0_TX_HEX, V1_TX_HEX].iter().map(|t| hex(t)).collect();
+        let txs: Vec<Vec<u8>> = [LEGACY_TX_HEX, V0_TX_HEX, V1_TX_HEX]
+            .iter()
+            .map(|t| hex(t))
+            .collect();
         let mut batch = 2u64.to_le_bytes().to_vec();
         for chunk in [&txs[..2], &txs[2..]] {
             batch.extend(1u64.to_le_bytes());
@@ -290,8 +365,13 @@ mod tests {
         }
         let (component, len) = parse_block_component(&batch).unwrap();
         assert_eq!(len, batch.len());
-        let BlockComponent::EntryBatch(entries) = component else { panic!("expected entries") };
-        assert_eq!(entries.iter().map(|e| e.transactions.len()).sum::<usize>(), 3);
+        let BlockComponent::EntryBatch(entries) = component else {
+            panic!("expected entries")
+        };
+        assert_eq!(
+            entries.iter().map(|e| e.transactions.len()).sum::<usize>(),
+            3
+        );
         // trailing zero padding after a batch is left to the caller
         let mut padded = batch.clone();
         padded.extend([0u8; 100]);
@@ -305,9 +385,21 @@ mod tests {
         marker.extend([1u8; 41]);
         assert_eq!(
             parse_block_component(&marker).unwrap(),
-            (BlockComponent::BlockMarker { version: 1, variant: 1 }, marker.len())
+            (
+                BlockComponent::BlockMarker {
+                    version: 1,
+                    variant: 1
+                },
+                marker.len()
+            )
         );
-        assert_eq!(parse_block_component(&marker[..marker.len() - 1]).unwrap_err(), WireError::Incomplete);
-        assert!(matches!(parse_entry_count(&50_001u64.to_le_bytes()), Err(WireError::Invalid(_))));
+        assert_eq!(
+            parse_block_component(&marker[..marker.len() - 1]).unwrap_err(),
+            WireError::Incomplete
+        );
+        assert!(matches!(
+            parse_entry_count(&50_001u64.to_le_bytes()),
+            Err(WireError::Invalid(_))
+        ));
     }
 }

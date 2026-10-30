@@ -770,6 +770,7 @@ struct StreamingEntryDecoder {
     buffer: Vec<u8>,
     expected_count: Option<u64>,
     entries_yielded: u64,
+    marker_complete: bool,
     cursor: usize,
 }
 
@@ -779,6 +780,7 @@ impl StreamingEntryDecoder {
             buffer: Vec::with_capacity(INITIAL_DECODER_BUFFER_CAPACITY),
             expected_count: None,
             entries_yielded: 0,
+            marker_complete: false,
             cursor: 0,
         }
     }
@@ -787,11 +789,16 @@ impl StreamingEntryDecoder {
         self.buffer.clear();
         self.expected_count = None;
         self.entries_yielded = 0;
+        self.marker_complete = false;
         self.cursor = 0;
     }
 
     fn is_complete(&self) -> bool {
-        matches!(self.expected_count, Some(expected) if self.entries_yielded >= expected)
+        match self.expected_count {
+            Some(0) => self.marker_complete,
+            Some(expected) => self.entries_yielded >= expected,
+            None => false,
+        }
     }
 
     fn push(
@@ -819,6 +826,17 @@ impl StreamingEntryDecoder {
         };
 
         let mut counts = DecodedCounts::default();
+
+        if expected == 0 && !self.marker_complete {
+            match wire_entry::parse_block_marker_body(&self.buffer[self.cursor..]) {
+                Ok((_, _, len)) => {
+                    self.cursor += len;
+                    self.marker_complete = true;
+                }
+                Err(WireError::Incomplete) => return Ok(counts),
+                Err(error) => return Err(error),
+            }
+        }
 
         while self.entries_yielded < expected {
             let remaining = &self.buffer[self.cursor..];
@@ -1748,73 +1766,29 @@ fn parse_compat_packet(packet: &[u8], cfg_prefix_skip: usize) -> Option<ParsedCo
 }
 
 struct CompatBatchDecoder {
-    buffer: Vec<u8>,
-    expected_count: Option<u64>,
-    entries_yielded: u64,
-    cursor: usize,
+    decoder: StreamingEntryDecoder,
     yielded_sigs: SignatureTracker,
 }
 
 impl CompatBatchDecoder {
     fn new(collect_signatures: bool) -> Self {
         Self {
-            buffer: Vec::with_capacity(INITIAL_DECODER_BUFFER_CAPACITY),
-            expected_count: None,
-            entries_yielded: 0,
-            cursor: 0,
+            decoder: StreamingEntryDecoder::new(),
             yielded_sigs: SignatureTracker::new(collect_signatures),
         }
     }
 
     fn reset(&mut self) {
-        self.buffer.clear();
-        self.expected_count = None;
-        self.entries_yielded = 0;
-        self.cursor = 0;
+        self.decoder.reset();
         self.yielded_sigs.clear();
     }
 
     fn push(&mut self, payload: &[u8]) -> std::result::Result<DecodedCounts, WireError> {
-        self.buffer.extend_from_slice(payload);
-        self.try_deserialize()
+        self.decoder.push(payload, &mut self.yielded_sigs)
     }
 
-    fn try_deserialize(&mut self) -> std::result::Result<DecodedCounts, WireError> {
-        if self.expected_count.is_none() && self.buffer.len() >= self.cursor + 8 {
-            // A zero count starts a block marker, which carries no transactions.
-            let count = wire_entry::parse_entry_count(&self.buffer[self.cursor..])?;
-            self.cursor += 8;
-            self.expected_count = Some(count);
-        }
-
-        let Some(expected) = self.expected_count else {
-            return Ok(DecodedCounts::default());
-        };
-
-        let mut counts = DecodedCounts::default();
-        while self.entries_yielded < expected {
-            let remaining = &self.buffer[self.cursor..];
-            if remaining.is_empty() {
-                break;
-            }
-
-            match wire_entry::parse_entry(remaining) {
-                Ok((entry, len)) => {
-                    self.cursor += len;
-                    self.entries_yielded += 1;
-                    counts.add(count_entry(&entry, &mut self.yielded_sigs));
-                }
-                Err(WireError::Incomplete) => break,
-                Err(error) => return Err(error),
-            }
-        }
-
-        if self.cursor > 128 * 1024 {
-            self.buffer.drain(..self.cursor);
-            self.cursor = 0;
-        }
-
-        Ok(counts)
+    fn is_complete(&self) -> bool {
+        self.decoder.is_complete()
     }
 }
 
@@ -1884,6 +1858,7 @@ impl CompatSlotAccumulator {
                 Ok(decoded) => counts.add(decoded),
                 Err(_) => {
                     self.decode_errors += 1;
+                    self.decoder.reset();
                     return;
                 }
             }
@@ -1891,6 +1866,9 @@ impl CompatSlotAccumulator {
                 self.slot_complete = true;
             }
             if batch_complete {
+                if !self.decoder.is_complete() {
+                    self.decode_errors += 1;
+                }
                 self.decoder.reset();
             }
         }
@@ -2025,6 +2003,44 @@ impl ShredstreamCompatReassembler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn block_marker() -> Vec<u8> {
+        let mut bytes = 0u64.to_le_bytes().to_vec();
+        bytes.extend(1u16.to_le_bytes());
+        bytes.push(1);
+        bytes.extend(41u16.to_le_bytes());
+        bytes.extend([1u8; 41]);
+        bytes
+    }
+
+    #[test]
+    fn streaming_marker_requires_the_entire_body() {
+        let marker = block_marker();
+        for cut in 0..marker.len() {
+            let mut decoder = StreamingEntryDecoder::new();
+            let mut signatures = SignatureTracker::new(true);
+            decoder.push(&marker[..cut], &mut signatures).unwrap();
+            assert!(!decoder.is_complete(), "marker cut {cut}");
+            decoder.push(&marker[cut..], &mut signatures).unwrap();
+            assert!(decoder.is_complete());
+            assert!(signatures.take().is_empty());
+        }
+    }
+
+    #[test]
+    fn compat_rejects_truncated_and_unknown_markers() {
+        let marker = block_marker();
+        for cut in 8..marker.len() {
+            let mut slot = CompatSlotAccumulator::new(true);
+            slot.push(0, marker[..cut].to_vec(), true, false);
+            assert!(slot.decode_errors > 0, "marker cut {cut}");
+        }
+        let mut invalid = marker;
+        invalid[8..10].copy_from_slice(&2u16.to_le_bytes());
+        let mut slot = CompatSlotAccumulator::new(true);
+        slot.push(0, invalid, true, false);
+        assert!(slot.decode_errors > 0);
+    }
 
     fn write_u16(raw: &mut [u8], offset: usize, value: u16) {
         raw[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
